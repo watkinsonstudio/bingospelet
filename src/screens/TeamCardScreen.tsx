@@ -48,7 +48,7 @@ export function TeamCardScreen() {
           <div className="section-title">Lagets bricka</div>
           <div className="section-sub">{team.name}</div>
         </div>
-        <div className="banner" style={{ background: 'var(--color-primary-soft)', color: 'var(--color-primary-strong)' }}>
+        <div className="banner" style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }}>
           <IconInfo className="banner__icon" width={18} height={18} />
           <span>
             En ruta tänds när minst <strong>{summary.threshold}</strong> av lagets {summary.playerCount} spelare klarat

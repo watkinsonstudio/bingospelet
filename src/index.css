@@ -5,39 +5,50 @@
    strukturen skrivs om (spec avsnitt 9). Byt värdena nedan för att tema om.
    ========================================================================== */
 :root {
-  /* Färg – bas */
-  --color-bg: #eef1f4;
+  /* Färg – bas (varm heritage-papper) */
+  --color-bg: #f1eee8;
   --color-surface: #ffffff;
-  --color-surface-2: #f4f6f8;
-  --color-surface-3: #e9edf1;
-  --color-text: #16202b;
-  --color-text-muted: #5b6b7a;
-  --color-text-faint: #8a99a8;
-  --color-border: #dfe5eb;
-  --color-border-strong: #c7d0d9;
+  --color-surface-2: #f4f1ea;
+  --color-surface-3: #e8e3d8;
+  --color-text: #1b1815;
+  --color-text-muted: #6c6157;
+  --color-text-faint: #9a8f82;
+  --color-border: #e3ddcf;
+  --color-border-strong: #ccc3b3;
 
-  /* Färg – varumärke (platshållare tills Skultuna Heritage appliceras) */
-  --color-primary: #0f5132;
-  --color-primary-strong: #0a3d25;
-  --color-primary-soft: #d7e8de;
+  /* Färg – struktur (Skultuna svart) */
+  --color-ink: #1a1613;
+  --color-ink-2: #0c0a08;
+  --color-ink-contrast: #f7f3ec;
+
+  /* Färg – varumärke (Skultuna röd). Mässing/guld är pausat. */
+  --color-primary: #c1121f;
+  --color-primary-strong: #8f0c16;
+  --color-primary-soft: #f8dcdc;
   --color-primary-contrast: #ffffff;
-  --color-accent: #e8b923;
-  --color-accent-contrast: #3a2c00;
+  --color-accent: #c1121f;
+  --color-accent-contrast: #4d0d13; /* mörk röd, för text på ljusröda ytor */
+
+  /* Färg – touch av grönt */
+  --color-green: #237a49;
+  --color-green-strong: #185c37;
+  --color-green-soft: #dcece3;
+  --color-green-contrast: #ffffff;
 
   /* Färg – status */
-  --color-success: #1a7f4b;
-  --color-danger: #c0392b;
-  --color-lit: #e8b923;
-  --color-lit-soft: #fbeec1;
-  --color-lit-glow: rgba(232, 185, 35, 0.55);
+  --color-success: #237a49;
+  --color-danger: #b0121f;
+  --color-lit: #c1121f; /* lagrutan tänds i rött */
+  --color-lit-soft: #f8dcdc;
+  --color-lit-glow: rgba(193, 18, 31, 0.5);
 
-  /* Nivåfärger */
-  --level-easy: #2f9e6f;
-  --level-medium: #e08a1e;
-  --level-hard: #d0453b;
-  --level-easy-soft: #dcf0e7;
-  --level-medium-soft: #fbe9d2;
-  --level-hard-soft: #f8dedb;
+  /* Nivåfärger (trafikljus: grön → dämpad bärnsten → röd) */
+  --level-easy: #237a49;
+  --level-medium: #c97d1f;
+  --level-hard: #b01722;
+  --level-easy-soft: #dcece3;
+  --level-medium-soft: #f6e6cf;
+  --level-hard-soft: #f7dcdc;
 
   /* Radier */
   --radius-sm: 8px;
@@ -81,25 +92,43 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-bg: #0c1116;
-    --color-surface: #161d25;
-    --color-surface-2: #1d262f;
-    --color-surface-3: #26313c;
-    --color-text: #eef2f6;
-    --color-text-muted: #a3b1bf;
-    --color-text-faint: #74838f;
-    --color-border: #29343e;
-    --color-border-strong: #3a4652;
+    --color-bg: #100d0b;
+    --color-surface: #1a1613;
+    --color-surface-2: #221d19;
+    --color-surface-3: #2c2621;
+    --color-text: #f2ede6;
+    --color-text-muted: #a99e91;
+    --color-text-faint: #776d61;
+    --color-border: #2e2822;
+    --color-border-strong: #40382f;
 
-    --color-primary: #2f9e6f;
-    --color-primary-strong: #46b585;
-    --color-primary-soft: #17352a;
-    --color-primary-contrast: #04150d;
+    --color-ink: #000000;
+    --color-ink-2: #000000;
+    --color-ink-contrast: #f7f3ec;
 
+    --color-primary: #e23744;
+    --color-primary-strong: #f0555f;
+    --color-primary-soft: #3a1518;
+    --color-primary-contrast: #ffffff;
+    --color-accent: #e23744;
+    --color-accent-contrast: #ffd9dc;
+
+    --color-green: #3fa06a;
+    --color-green-strong: #2f7d4f;
+    --color-green-soft: #143026;
+
+    --color-success: #3fa06a;
+    --color-danger: #e2545e;
+    --color-lit: #e23744;
+    --color-lit-soft: #3a1518;
+    --color-lit-glow: rgba(226, 55, 68, 0.5);
+
+    --level-easy: #3fa06a;
+    --level-medium: #d08b3a;
+    --level-hard: #e04b53;
     --level-easy-soft: #14312a;
-    --level-medium-soft: #322414;
-    --level-hard-soft: #331a19;
-    --color-lit-soft: #33290f;
+    --level-medium-soft: #33261a;
+    --level-hard-soft: #331a1a;
 
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
@@ -204,7 +233,7 @@ a {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: var(--color-primary);
+  background: var(--color-ink);
   color: var(--color-primary-contrast);
   padding: max(var(--space-2), env(safe-area-inset-top, 0px)) var(--space-4) var(--space-2);
   box-shadow: var(--shadow-sm);
@@ -230,7 +259,7 @@ a {
   height: 38px;
   border-radius: var(--radius-full);
   background: var(--color-accent);
-  color: var(--color-accent-contrast);
+  color: var(--color-primary-contrast);
   display: grid;
   place-items: center;
   font-weight: var(--fw-black);
@@ -522,7 +551,7 @@ button.cell:active {
 
 /* FRI-ruta */
 .cell--free {
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-strong));
+  background: linear-gradient(135deg, var(--color-green), var(--color-green-strong));
   color: #fff;
   border-color: transparent;
 }
@@ -662,7 +691,7 @@ button.cell:active {
 }
 .btn--accent {
   background: var(--color-accent);
-  color: var(--color-accent-contrast);
+  color: var(--color-primary-contrast);
   box-shadow: var(--shadow-sm);
 }
 .btn--ghost {
@@ -946,7 +975,7 @@ button.cell:active {
   justify-content: center;
   padding: var(--space-6);
   gap: var(--space-5);
-  background: linear-gradient(160deg, var(--color-primary-strong), var(--color-primary));
+  background: linear-gradient(160deg, var(--color-ink), var(--color-ink-2));
   color: #fff;
 }
 .login__brand {
@@ -961,7 +990,7 @@ button.cell:active {
   height: 72px;
   border-radius: var(--radius-full);
   background: var(--color-accent);
-  color: var(--color-accent-contrast);
+  color: var(--color-primary-contrast);
   display: grid;
   place-items: center;
   font-size: 1.8rem;
@@ -1045,7 +1074,7 @@ textarea.input {
   font-size: 0.62rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--color-accent-contrast);
+  color: var(--color-primary-contrast);
   background: var(--color-accent);
   border-radius: var(--radius-full);
   padding: 2px 7px;
@@ -1087,7 +1116,7 @@ textarea.input {
    Coach & final
    ========================================================================== */
 .hero-final {
-  background: linear-gradient(150deg, var(--color-primary-strong), var(--color-primary));
+  background: linear-gradient(150deg, var(--color-ink), var(--color-ink-2));
   color: #fff;
   border-radius: var(--radius-lg);
   padding: var(--space-6);

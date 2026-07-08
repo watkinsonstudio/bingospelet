@@ -120,7 +120,7 @@ export function MyCardScreen() {
             <span className="legend__swatch" style={{ background: 'var(--level-hard)' }} /> {LEVEL_LABELS.S} · 3p
           </span>
           <span className="legend__item">
-            <span className="legend__swatch" style={{ background: 'var(--color-primary)' }} /> FRI
+            <span className="legend__swatch" style={{ background: 'var(--color-green)' }} /> FRI
           </span>
         </div>
       </div>
