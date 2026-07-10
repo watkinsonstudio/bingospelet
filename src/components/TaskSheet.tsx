@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { LEVEL_LABELS, LEVEL_POINTS, type Level, type Task } from '../data/types';
 import { isFreeCell } from '../domain/board';
 import { Sheet } from './Sheet';
+import { getExerciseArt } from './exerciseArt';
 import { IconCheck, IconClose, IconLock, IconPlay, IconUndo } from './icons';
 
 interface TaskSheetProps {
@@ -41,6 +42,7 @@ export function TaskSheet({
   const [selected, setSelected] = useState<Level | null>(currentLevel ?? (multiLevel ? null : 'L'));
 
   const free = isFreeCell(task.cellIndex);
+  const art = getExerciseArt(task.title);
 
   return (
     <Sheet onClose={onClose} label={task.title}>
@@ -68,10 +70,13 @@ export function TaskSheet({
         </div>
       ) : (
         <>
-          {/* Yta för demo-animation/video (spec avsnitt 7) */}
-          <div className="media-slot">
+          {/* Yta för demo-animation/video (spec avsnitt 7).
+              Prioritet: riktig film → line-art-illustration → platshållare. */}
+          <div className={`media-slot${art && !task.animationUrl ? ' media-slot--art' : ''}`}>
             {task.animationUrl ? (
               <video src={task.animationUrl} controls playsInline style={{ width: '100%', borderRadius: 'var(--radius-md)' }} />
+            ) : art ? (
+              art
             ) : (
               <>
                 <IconPlay width={26} height={26} />

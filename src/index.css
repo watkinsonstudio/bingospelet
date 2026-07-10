@@ -811,6 +811,22 @@ button.cell:active {
   margin-bottom: var(--space-4);
 }
 
+/* Line-art-illustration i mediaytan */
+.media-slot--art {
+  border-style: solid;
+  border-color: var(--color-border);
+  padding: var(--space-3);
+}
+.exercise-art {
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  color: var(--color-text);
+}
+.exercise-art .accent {
+  color: var(--color-primary);
+}
+
 /* Nivåval */
 .levels {
   display: flex;
