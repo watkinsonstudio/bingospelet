@@ -1,3 +1,4 @@
+import { uid } from '../lib/uid';
 import { loadStore, resetStore, saveStore } from './localStore';
 import {
   FREE_CELL_INDEX,
@@ -68,7 +69,7 @@ export class LocalRepository implements BingoRepository {
       );
     } else {
       const entry: Entry = {
-        id: `entry-${crypto.randomUUID()}`,
+        id: `entry-${uid()}`,
         weekId,
         playerId,
         cellIndex,

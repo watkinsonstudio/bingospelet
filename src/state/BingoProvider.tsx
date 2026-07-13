@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { repository } from '../data/repository';
+import { uid } from '../lib/uid';
 import type { DataStore, Level, Task, Week } from '../data/types';
 import { FREE_CELL_INDEX } from '../data/types';
 import { getActiveWeek, getClubWeeks, getPlayer } from '../domain/selectors';
@@ -112,7 +113,7 @@ export function BingoProvider({ children }: { children: ReactNode }) {
       if (!db) return;
       const weeks = getClubWeeks(db, CLUB_ID);
       const nextNumber = weeks.reduce((max, w) => Math.max(max, w.weekNumber), 0) + 1;
-      const weekId = `week-${crypto.randomUUID()}`;
+      const weekId = `week-${uid()}`;
       const week: Week = {
         id: weekId,
         teamId: null,
