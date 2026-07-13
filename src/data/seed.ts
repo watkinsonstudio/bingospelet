@@ -187,9 +187,9 @@ function freeTask(weekId: string): Task {
 // Sammansatt seed
 // ---------------------------------------------------------------------------
 
-// v2: riktiga trupper från medlemslistan, tomma brickor (ingen förseedad
-// aktivitet med riktiga spelare). Bumpad version → localStorage seedas om.
-export const SEED_VERSION = 2;
+// v3: riktiga trupper (namnkrockar disambiguerade, Fotbollskul Damer borttagen).
+// Tomma brickor. Bumpad version → localStorage seedas om.
+export const SEED_VERSION = 3;
 
 export function createSeedData(): DataStore {
   return {

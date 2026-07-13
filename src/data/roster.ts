@@ -1,5 +1,6 @@
-// AUTOGENERERAD från föreningens medlemsexport (scratchpad/gen_roster).
-// Endast förnamn + efternamnets första bokstav lagras – inga andra personuppgifter.
+// AUTOGENERERAD från föreningens medlemsexport (scratchpad).
+// Endast förnamn + efternamnets första bokstav lagras. Vid namnkrock i samma
+// lag används två bokstäver; kvarstående exakt lika namn får en siffra.
 // Roll: 'coach' för tränare/ledare/styrelse, annars 'player'.
 
 export interface RosterMember { name: string; role: 'player' | 'coach'; }
@@ -95,8 +96,8 @@ export const ROSTER: RosterTeam[] = [
       { name: "Minova H", role: "player" },
       { name: "Olivia S", role: "player" },
       { name: "Signe W", role: "player" },
-      { name: "Stella L", role: "player" },
-      { name: "Stella L", role: "player" },
+      { name: "Stella Li", role: "player" },
+      { name: "Stella Lö", role: "player" },
       { name: "Stephanie F", role: "player" },
       { name: "Wilma S", role: "player" },
     ],
@@ -225,8 +226,8 @@ export const ROSTER: RosterTeam[] = [
       { name: "Chatchai A", role: "coach" },
       { name: "Edvin W", role: "player" },
       { name: "Erik W", role: "coach" },
-      { name: "Loui Å", role: "player" },
-      { name: "Loui Å", role: "player" },
+      { name: "Loui Åb", role: "player" },
+      { name: "Loui Åk", role: "player" },
       { name: "Markos A", role: "player" },
       { name: "Måns H", role: "player" },
       { name: "Nicholas R", role: "player" },
@@ -264,17 +265,6 @@ export const ROSTER: RosterTeam[] = [
       { name: "Ted L", role: "player" },
       { name: "Viggo S", role: "player" },
       { name: "Yuel F", role: "player" },
-    ],
-  },
-  {
-    name: "Fotbollskul Damer",
-    slug: "fkuldam",
-    joinCode: "FKULDAM",
-    members: [
-      { name: "Amanda J", role: "coach" },
-      { name: "Maria P", role: "coach" },
-      { name: "Ronja H", role: "player" },
-      { name: "Zandra N", role: "player" },
     ],
   },
   {
@@ -330,10 +320,10 @@ export const ROSTER: RosterTeam[] = [
       { name: "Hassan M", role: "player" },
       { name: "Jonatan S", role: "player" },
       { name: "Mo A", role: "player" },
-      { name: "Mohamed A", role: "player" },
-      { name: "Mohamed A", role: "player" },
-      { name: "Mohamed H", role: "player" },
-      { name: "Mohamed H", role: "player" },
+      { name: "Mohamed Ab", role: "player" },
+      { name: "Mohamed Ah", role: "player" },
+      { name: "Mohamed Ha 1", role: "player" },
+      { name: "Mohamed Ha 2", role: "player" },
       { name: "Mohamed S", role: "player" },
       { name: "Mohamed Y", role: "player" },
       { name: "Mohammad S", role: "player" },
