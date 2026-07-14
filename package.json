@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.app.json --noEmit && vite build",
     "build:single": "tsc -p tsconfig.app.json --noEmit && vite build --mode singlefile",
+    "build:single-noart": "tsc -p tsconfig.app.json --noEmit && vite build --mode singlefile-noart",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

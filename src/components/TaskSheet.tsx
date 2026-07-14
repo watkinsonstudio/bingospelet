@@ -42,7 +42,9 @@ export function TaskSheet({
   const [selected, setSelected] = useState<Level | null>(currentLevel ?? (multiLevel ? null : 'L'));
 
   const free = isFreeCell(task.cellIndex);
-  const art = getExerciseArt(task.title);
+  // Bygg med VITE_NO_ART för en version helt utan illustrationer.
+  const noArt = Boolean(import.meta.env.VITE_NO_ART);
+  const art = noArt ? null : getExerciseArt(task.title);
 
   return (
     <Sheet onClose={onClose} label={task.title}>
@@ -71,19 +73,22 @@ export function TaskSheet({
       ) : (
         <>
           {/* Yta för demo-animation/video (spec avsnitt 7).
-              Prioritet: riktig film → line-art-illustration → platshållare. */}
-          <div className={`media-slot${art && !task.animationUrl ? ' media-slot--art' : ''}`}>
-            {task.animationUrl ? (
-              <video src={task.animationUrl} controls playsInline style={{ width: '100%', borderRadius: 'var(--radius-md)' }} />
-            ) : art ? (
-              art
-            ) : (
-              <>
-                <IconPlay width={26} height={26} />
-                <span>Demo-film läggs till senare</span>
-              </>
-            )}
-          </div>
+              Prioritet: riktig film → line-art-illustration → platshållare.
+              I no-art-läge visas ingen mediayta alls (om det inte finns en film). */}
+          {(task.animationUrl || art || !noArt) && (
+            <div className={`media-slot${art && !task.animationUrl ? ' media-slot--art' : ''}`}>
+              {task.animationUrl ? (
+                <video src={task.animationUrl} controls playsInline style={{ width: '100%', borderRadius: 'var(--radius-md)' }} />
+              ) : art ? (
+                art
+              ) : (
+                <>
+                  <IconPlay width={26} height={26} />
+                  <span>Demo-film läggs till senare</span>
+                </>
+              )}
+            </div>
+          )}
 
           {multiLevel && (
             <>
