@@ -101,6 +101,17 @@ Spelarna är minderåriga, så appen är medvetet snål: ingen e-post, inga lös
 inga kontaktuppgifter. Endast förnamn (och en färg) lagras. Inloggning sker med en
 lag-kod + namnval.
 
+## Systerapp: Spontan (`spontan/`)
+
+I mappen [`spontan/`](spontan/README.md) ligger ett fristående utkast till en app
+för **spontanfotboll** – säga att man är sugen på matchspel, spontanträning eller
+teknikpass, se vilka fler som är det och starta ett pass. Egen datamodell, eget
+bygge och egen deploy; den delar bara arkitekturprinciperna med Sommarbingo.
+
+```bash
+cd spontan && npm install && npm run dev
+```
+
 ## Öppna frågor från spec (avsnitt 8) – så här är de lösta i v1
 
 - **Delat övningsbibliotek:** veckor ligger på klubbnivå (`team_id = null`) och delas av
