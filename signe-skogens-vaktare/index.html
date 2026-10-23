@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f1c17">
+<title>Signe och Skogens Väktare</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;700&family=Silkscreen&display=swap">
+<style>
+/* Layout: helskärmscanvas, HUD i hörnen, spak nere till vänster och
+   aktionsknappar i en båge nere till höger. Ett enda mörkt skogstema. */
+:root {
+  --pine-950: #0a130f;
+  --pine-900: #0f1c17;
+  --pine-800: #172a22;
+  --pine-700: #21392e;
+  --pine-600: #2f4c3d;
+  --birch: #f1ece0;
+  --birch-dim: #b9b5a8;
+  --amber: #ffcf5a;
+  --ice: #7ff3ff;
+  --moss: #8fcf6a;
+  --storm: #a98aff;
+  --danger: #ff7a66;
+  --font-display: 'Pixelify Sans', 'Trebuchet MS', system-ui, sans-serif;
+  --font-label: 'Silkscreen', 'Courier New', ui-monospace, monospace;
+  --frame: 0 0 0 2px var(--pine-950), 0 0 0 4px var(--pine-600), 0 0 0 6px var(--pine-950);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; overflow: hidden; background: var(--pine-950); color: var(--birch); font-family: var(--font-display); }
+body { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+button { font-family: var(--font-display); color: inherit; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+
+#app { position: fixed; inset: 0; }
+#view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* ---------- HUD ---------- */
+.hud { position: absolute; pointer-events: none; z-index: 5; }
+#hud-left { top: calc(env(safe-area-inset-top, 0px) + 10px); left: calc(env(safe-area-inset-left, 0px) + 12px); display: flex; flex-direction: column; gap: 8px; }
+#hud-right { top: calc(env(safe-area-inset-top, 0px) + 10px); right: calc(env(safe-area-inset-right, 0px) + 12px); display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+#hud-center { top: calc(env(safe-area-inset-top, 0px) + 10px); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+
+.plate { background: rgba(15, 28, 23, 0.82); box-shadow: var(--frame); padding: 6px 8px; }
+#energy { display: flex; align-items: center; gap: 6px; }
+#energy-cells { height: 30px; }
+#shield { font-family: var(--font-label); font-size: 11px; color: var(--amber); }
+.bar { position: relative; height: 8px; background: #08100c; box-shadow: 0 0 0 1px #000; }
+.bar > i { position: absolute; inset: 0 auto 0 0; width: 0%; display: block; }
+#cool-row { display: flex; align-items: center; gap: 6px; margin-top: 5px; font-family: var(--font-label); font-size: 9px; letter-spacing: 0.06em; color: var(--ice); }
+#cool-bar { width: 86px; }
+#cool-bar > i { background: repeating-linear-gradient(90deg, var(--ice) 0 6px, #3ab8d0 6px 7px); }
+
+#companion-card { display: flex; gap: 8px; align-items: center; pointer-events: auto; cursor: pointer; border: 0; text-align: left; }
+#comp-portrait { width: 44px; height: 44px; background: var(--pine-700); }
+#comp-meta { display: flex; flex-direction: column; gap: 3px; min-width: 110px; }
+#comp-name { font-size: 15px; font-weight: 700; line-height: 1; }
+#comp-level { font-family: var(--font-label); font-size: 9px; color: var(--moss); letter-spacing: 0.04em; }
+#comp-xp > i { background: var(--moss); }
+#comp-super { display: flex; align-items: center; gap: 5px; font-family: var(--font-label); font-size: 9px; color: var(--birch-dim); }
+#comp-super .bar { width: 64px; height: 6px; }
+#comp-super .bar > i { background: linear-gradient(90deg, #ff9a2a, var(--amber)); }
+#comp-super.ready { color: var(--amber); }
+#comp-super.locked .bar { opacity: 0.35; }
+
+#storm { text-align: center; min-width: 168px; }
+#storm-label { font-family: var(--font-label); font-size: 9px; letter-spacing: 0.12em; color: var(--birch-dim); }
+#storm-state { font-size: 14px; font-weight: 700; color: var(--storm); }
+#storm-bar { width: 150px; height: 6px; margin: 4px auto 0; }
+#storm-bar > i { background: linear-gradient(90deg, #ffe6a8, #a98aff 60%, #ff6af0); }
+
+#res { display: flex; gap: 10px; align-items: center; font-family: var(--font-label); font-size: 12px; }
+#res span { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+#res img { width: 18px; height: 18px; image-rendering: pixelated; }
+#minimap-wrap { position: relative; padding: 4px; }
+#minimap { width: 78px; height: 104px; display: block; }
+#sector-name { font-family: var(--font-label); font-size: 9px; text-align: center; color: var(--birch-dim); letter-spacing: 0.06em; margin-top: 3px; }
+
+#menu-btn { pointer-events: auto; width: 40px; height: 40px; border: 0; background: rgba(15, 28, 23, 0.82); box-shadow: var(--frame); display: grid; place-items: center; cursor: pointer; }
+#menu-btn img { width: 22px; height: 22px; image-rendering: pixelated; }
+#top-right-row { display: flex; gap: 10px; align-items: flex-start; }
+
+#toast { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 74px); left: 50%; transform: translateX(-50%); z-index: 8; pointer-events: none; max-width: min(88vw, 460px); text-align: center; font-size: 15px; padding: 8px 14px; opacity: 0; transition: opacity 0.25s; }
+#toast.on { opacity: 1; }
+#banner { position: absolute; top: 34%; left: 0; right: 0; text-align: center; z-index: 6; pointer-events: none; opacity: 0; transition: opacity 0.6s; }
+#banner.on { opacity: 1; }
+#banner b { display: block; font-size: clamp(30px, 7vw, 56px); font-weight: 700; color: var(--birch); text-shadow: 3px 3px 0 var(--pine-950), 0 0 18px rgba(0,0,0,0.6); letter-spacing: 0.02em; }
+#banner small { font-family: var(--font-label); font-size: 11px; letter-spacing: 0.2em; color: var(--amber); text-shadow: 2px 2px 0 var(--pine-950); }
+
+/* ---------- Touchkontroller ---------- */
+#stick-zone { position: absolute; left: 0; bottom: 0; width: 46%; height: 62%; z-index: 4; touch-action: none; }
+#stick-base { position: fixed; width: 104px; height: 104px; margin: -52px 0 0 -52px; border-radius: 50%; background: radial-gradient(circle, rgba(241,236,224,0.08) 0 55%, rgba(241,236,224,0.16) 56% 60%, transparent 61%); left: calc(env(safe-area-inset-left, 0px) + 96px); bottom: auto; top: calc(100% - 120px - env(safe-area-inset-bottom, 0px)); opacity: 0.5; transition: opacity 0.15s; pointer-events: none; }
+#stick-base.on { opacity: 1; }
+#stick-knob { position: absolute; left: 30px; top: 30px; width: 44px; height: 44px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #f1ece0, #b9b5a8 60%, #6c6a60); box-shadow: 0 3px 0 #2a2a24; }
+
+#btns { position: absolute; right: calc(env(safe-area-inset-right, 0px) + 14px); bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); width: 214px; height: 214px; z-index: 6; pointer-events: none; }
+.btn { position: absolute; pointer-events: auto; border: 0; border-radius: 50%; display: grid; place-items: center; background: radial-gradient(circle at 45% 35%, var(--c1), var(--c2)); box-shadow: 0 4px 0 var(--c3), 0 0 0 3px var(--pine-950); touch-action: none; cursor: pointer; padding: 0; }
+.btn img { width: 46%; height: 46%; image-rendering: pixelated; pointer-events: none; }
+.btn span { position: absolute; bottom: -17px; left: 50%; transform: translateX(-50%); font-family: var(--font-label); font-size: 9px; letter-spacing: 0.04em; white-space: nowrap; color: var(--birch); text-shadow: 1px 1px 0 var(--pine-950), -1px -1px 0 var(--pine-950); pointer-events: none; }
+.btn.held { transform: translateY(3px); box-shadow: 0 1px 0 var(--c3), 0 0 0 3px var(--pine-950); }
+.btn.cd { filter: saturate(0.25) brightness(0.65); }
+.btn .cdtxt { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--font-label); font-size: 13px; color: #fff; text-shadow: 1px 1px 0 #000; pointer-events: none; }
+#b-staff { --c1: #7ff3ff; --c2: #2f9ab8; --c3: #1a5a70; width: 84px; height: 84px; right: 0; bottom: 12px; }
+#b-frost { --c1: #d8f6ff; --c2: #6ab0e0; --c3: #3a6a90; width: 64px; height: 64px; right: 100px; bottom: 6px; }
+#b-coop { --c1: #c8f0a0; --c2: #5aa04a; --c3: #2f6a2b; width: 58px; height: 58px; right: 92px; bottom: 96px; }
+#b-super { --c1: #fff2b0; --c2: #e0a020; --c3: #8a5a10; width: 58px; height: 58px; right: 14px; bottom: 128px; }
+#b-super.locked { filter: grayscale(1) brightness(0.45); }
+#b-super.ready { animation: pulse 0.9s ease-in-out infinite alternate; }
+#b-interact { --c1: #ffe6a8; --c2: #d9962a; --c3: #7a4a10; width: 54px; height: 54px; right: 176px; bottom: 150px; border-radius: 14px; }
+#b-interact span { bottom: auto; top: -18px; font-size: 10px; }
+@keyframes pulse { from { box-shadow: 0 4px 0 var(--c3), 0 0 0 3px var(--pine-950), 0 0 0 5px rgba(255,207,90,0.2); } to { box-shadow: 0 4px 0 var(--c3), 0 0 0 3px var(--pine-950), 0 0 0 12px rgba(255,207,90,0.55); } }
+
+/* ---------- Paneler ---------- */
+.panel { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(6, 12, 9, 0.72); padding: calc(env(safe-area-inset-top, 0px) + 12px) max(12px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 12px) max(12px, env(safe-area-inset-left, 0px)); touch-action: pan-y; }
+.sheet { width: min(760px, 100%); max-height: 100%; overflow: auto; background: var(--pine-900); box-shadow: var(--frame); padding: 16px; display: flex; flex-direction: column; gap: 14px; overscroll-behavior: contain; }
+.sheet h2 { margin: 0; font-size: 26px; line-height: 1.05; text-wrap: balance; }
+.sheet h3 { margin: 0; font-size: 17px; }
+.eyebrow { font-family: var(--font-label); font-size: 10px; letter-spacing: 0.16em; color: var(--amber); }
+.sheet p { margin: 0; line-height: 1.45; color: var(--birch-dim); max-width: 62ch; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.spread { justify-content: space-between; }
+.pbtn { border: 0; background: var(--pine-700); box-shadow: 0 3px 0 var(--pine-950), 0 0 0 2px var(--pine-600) inset; padding: 9px 14px; font-size: 15px; cursor: pointer; }
+.pbtn:hover { background: var(--pine-600); }
+.pbtn.primary { background: var(--amber); color: #2a1a04; box-shadow: 0 3px 0 #8a5a10; font-weight: 700; }
+.pbtn.danger { background: #5a2a24; }
+.pbtn:disabled { opacity: 0.45; cursor: default; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.tab { border: 0; background: transparent; padding: 7px 10px; font-family: var(--font-label); font-size: 11px; letter-spacing: 0.06em; color: var(--birch-dim); cursor: pointer; box-shadow: 0 2px 0 var(--pine-700); }
+.tab[aria-selected="true"] { color: var(--amber); box-shadow: 0 2px 0 var(--amber); }
+.cost { font-family: var(--font-label); font-size: 11px; display: inline-flex; gap: 8px; align-items: center; font-variant-numeric: tabular-nums; }
+.cost img { width: 14px; height: 14px; image-rendering: pixelated; vertical-align: -2px; }
+.short { color: var(--danger); }
+
+/* Smedjan */
+.forge-grid { display: grid; grid-template-columns: minmax(150px, 210px) 1fr; gap: 16px; }
+.forge-grid > * { min-width: 0; }
+#forge-preview { width: 100%; aspect-ratio: 3 / 4; max-width: 210px; background: radial-gradient(circle at 50% 70%, #2f4c3d, #0f1c17 70%); box-shadow: var(--frame); }
+.style-badge { padding: 8px 10px; background: var(--pine-800); box-shadow: 0 0 0 2px var(--pine-700) inset; }
+.style-badge b { display: block; font-size: 16px; }
+.style-badge small { color: var(--birch-dim); font-size: 13px; line-height: 1.35; display: block; margin-top: 2px; }
+.style-badge[data-style="camo"] b { color: var(--moss); }
+.style-badge[data-style="neon"] b { color: #ff6af0; }
+.style-badge[data-style="graphite"] b { color: #b9c0cc; }
+.presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.preset { border: 0; text-align: left; padding: 8px; background: var(--pine-800); box-shadow: 0 0 0 2px var(--pine-700) inset; cursor: pointer; display: flex; flex-direction: column; gap: 6px; }
+.preset[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--amber) inset; }
+.swatches { display: flex; gap: 3px; }
+.swatches i { width: 22px; height: 14px; display: block; box-shadow: 0 0 0 1px #000 inset; }
+.preset .pname { font-size: 14px; }
+.preset .ptag { font-family: var(--font-label); font-size: 9px; color: var(--birch-dim); letter-spacing: 0.05em; }
+.painter { display: grid; gap: 10px; padding: 10px; background: var(--pine-800); box-shadow: 0 0 0 2px var(--pine-700) inset; }
+.zone-row { display: grid; grid-template-columns: 92px 44px 1fr; gap: 8px; align-items: center; }
+.zone-row label { font-size: 14px; }
+.zone-row input[type="color"] { width: 44px; height: 32px; border: 0; padding: 0; background: none; cursor: pointer; }
+.quick { display: flex; flex-wrap: wrap; gap: 3px; }
+.quick button { width: 18px; height: 18px; border: 0; padding: 0; box-shadow: 0 0 0 1px #000 inset; cursor: pointer; }
+.upgrades { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.upg { padding: 10px; background: var(--pine-800); box-shadow: 0 0 0 2px var(--pine-700) inset; display: flex; flex-direction: column; gap: 6px; }
+.upg h3 { font-size: 16px; }
+.pips { display: flex; gap: 3px; }
+.pips i { width: 16px; height: 6px; background: #08100c; box-shadow: 0 0 0 1px #000 inset; }
+.pips i.on { background: var(--ice); }
+.upg small { color: var(--birch-dim); font-size: 13px; line-height: 1.35; }
+
+/* Kompisar */
+.comp-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.comp { padding: 10px; background: var(--pine-800); box-shadow: 0 0 0 2px var(--pine-700) inset; display: flex; flex-direction: column; gap: 6px; }
+.comp.active { box-shadow: 0 0 0 2px var(--moss) inset; }
+.comp.locked { opacity: 0.55; }
+.comp header { display: flex; gap: 8px; align-items: center; }
+.comp canvas { width: 40px; height: 40px; background: var(--pine-700); }
+.comp ol { margin: 0; padding-left: 18px; color: var(--birch-dim); font-size: 13px; line-height: 1.35; display: grid; gap: 3px; }
+.comp ol li.got { color: var(--birch); }
+.comp .bar { height: 6px; }
+.comp .bar > i { background: var(--moss); }
+
+/* Titel */
+#panel-title { background: radial-gradient(ellipse at 50% 120%, rgba(169,138,255,0.25), transparent 60%), rgba(6, 12, 9, 0.55); }
+.title-card { width: min(560px, 100%); display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
+.title-card h1 { margin: 0; font-size: clamp(36px, 9vw, 64px); line-height: 0.95; font-weight: 700; text-shadow: 4px 4px 0 var(--pine-950); text-wrap: balance; }
+.title-card h1 em { font-style: normal; color: var(--moss); }
+.title-card p { margin: 0; font-size: 16px; line-height: 1.5; color: var(--birch); max-width: 46ch; text-shadow: 1px 1px 0 var(--pine-950); }
+.keys { font-family: var(--font-label); font-size: 10px; letter-spacing: 0.04em; color: var(--birch-dim); line-height: 1.7; }
+
+#app.title .hud, #app.title #btns, #app.title #stick-base, #app.title #stick-zone { display: none; }
+#dialog { position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); transform: translateX(-50%); z-index: 15; width: min(560px, calc(100% - 480px)); min-width: min(320px, calc(100% - 32px)); padding: 12px 14px; font-size: 16px; line-height: 1.45; pointer-events: auto; }
+#dialog small { display: block; margin-top: 6px; font-family: var(--font-label); font-size: 9px; color: var(--birch-dim); letter-spacing: 0.08em; }
+
+.test-grid { display: grid; gap: 10px; }
+.test-grid input[type="range"] { width: 100%; }
+
+@media (max-width: 620px) {
+  .forge-grid { grid-template-columns: 1fr; }
+  #forge-preview { max-width: 150px; justify-self: center; }
+  #storm { min-width: 0; }
+  #storm-bar { width: 100px; }
+  #hud-center { top: calc(env(safe-area-inset-top, 0px) + 172px); left: auto; right: calc(env(safe-area-inset-right, 0px) + 12px); transform: none; }
+  #comp-meta { min-width: 92px; }
+  #minimap { width: 60px; height: 80px; }
+  #toast { top: calc(env(safe-area-inset-top, 0px) + 150px); }
+  #dialog { width: calc(100% - 32px); bottom: calc(env(safe-area-inset-bottom, 0px) + 250px); }
+}
+@media (max-height: 460px) {
+  #minimap { width: 54px; height: 72px; }
+  .plate { padding: 4px 6px; }
+  #hud-left, #hud-right { gap: 6px; }
+  #comp-portrait { width: 34px; height: 34px; }
+  #comp-name { font-size: 13px; }
+  #storm-state { font-size: 12px; }
+  #dialog { font-size: 14px; padding: 9px 12px; }
+  #btns { transform: scale(0.85); transform-origin: right bottom; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #b-super.ready { animation: none; box-shadow: 0 4px 0 var(--c3), 0 0 0 3px var(--pine-950), 0 0 0 8px rgba(255,207,90,0.5); }
+  #toast, #banner { transition: none; }
+}
+</style>
+</head>
+<body>
+<div id="app" class="title">
+  <canvas id="view" aria-label="Spelvärlden"></canvas>
+
+  <div id="stick-zone"></div>
+  <div id="stick-base"><div id="stick-knob"></div></div>
+
+  <div class="hud" id="hud-left">
+    <div class="plate">
+      <div id="energy"><canvas id="energy-cells" width="80" height="12"></canvas><span id="shield" hidden></span></div>
+      <div id="cool-row">KYLA <div class="bar" id="cool-bar"><i></i></div></div>
+    </div>
+    <button class="plate" id="companion-card" type="button" aria-label="Byt djurkompis">
+      <canvas id="comp-portrait" width="22" height="22"></canvas>
+      <div id="comp-meta">
+        <div id="comp-name">Hunden</div>
+        <div id="comp-level">NIVÅ 1 · NYFIKEN HJÄLPARE</div>
+        <div class="bar" id="comp-xp"><i></i></div>
+        <div id="comp-super" class="locked">SUPER <div class="bar"><i></i></div></div>
+      </div>
+    </button>
+  </div>
+
+  <div class="hud" id="hud-center">
+    <div class="plate" id="storm">
+      <div id="storm-label">TIDSSTORMEN</div>
+      <div id="storm-state">Lugnt</div>
+      <div class="bar" id="storm-bar"><i></i></div>
+    </div>
+  </div>
+
+  <div class="hud" id="hud-right">
+    <div id="top-right-row">
+      <div class="plate" id="res">
+        <span title="Skrot"><img id="ic-scrap" alt=""><b id="r-scrap">0</b></span>
+        <span title="Kretsar"><img id="ic-chip" alt=""><b id="r-chips">0</b></span>
+        <span title="Energikristaller"><img id="ic-crystal" alt=""><b id="r-crystals">0/8</b></span>
+      </div>
+      <button id="menu-btn" type="button" aria-label="Meny"><img id="ic-menu" alt=""></button>
+    </div>
+    <div class="plate" id="minimap-wrap">
+      <canvas id="minimap" width="96" height="128"></canvas>
+      <div id="sector-name">MOSSDALEN</div>
+    </div>
+  </div>
+
+  <div id="btns">
+    <button class="btn" id="b-staff" data-act="staff" type="button" aria-label="El-stav (håll in för EMP)"><img alt=""><span>EL-STAV</span></button>
+    <button class="btn" id="b-frost" data-act="frost" type="button" aria-label="Fryskastare"><img alt=""><span>FRYS</span></button>
+    <button class="btn" id="b-coop" data-act="coop" type="button" aria-label="Samarbete"><img alt=""><span id="coop-label">NOSA</span><b class="cdtxt" id="coop-cd"></b></button>
+    <button class="btn locked" id="b-super" data-act="super" type="button" aria-label="Superattack"><img alt=""><span>SUPER</span></button>
+    <button class="btn" id="b-interact" data-act="interact" type="button" aria-label="Interagera" hidden><img alt=""><span id="interact-label">ÖPPNA</span></button>
+  </div>
+
+  <div id="toast" class="plate" role="status" aria-live="polite"></div>
+  <div id="banner"><small id="banner-sub">SEKTOR</small><b id="banner-title">Mossdalen</b></div>
+  <div id="dialog" class="plate" hidden></div>
+
+  <!-- Titel -->
+  <div class="panel" id="panel-title">
+    <div class="title-card">
+      <div class="eyebrow">ETT ÄVENTYR I DEN URÅLDRIGA SKOGEN</div>
+      <h1>Signe och <em>Skogens</em> Väktare</h1>
+      <p>Tidsstormen laddar upp sig över skogen. Samla energikristaller, kortslut vilsna robotar och bli vän med skogens djur. Med åtta kristaller kan du väcka Urkärnan och höja skölden.</p>
+      <div class="row">
+        <button class="pbtn primary" id="btn-start" type="button">Starta äventyret</button>
+        <button class="pbtn" id="btn-continue" type="button" hidden>Fortsätt</button>
+      </div>
+      <div class="keys">TOUCH: SPAK TILL VÄNSTER · KNAPPAR TILL HÖGER<br>TANGENTBORD: WASD · J STAV (HÅLL = EMP) · K FRYS · L SAMARBETE · MELLANSLAG SUPER · E INTERAGERA · Q BYT DJUR · ESC MENY</div>
+    </div>
+  </div>
+
+  <!-- Meny -->
+  <div class="panel" id="panel-menu" hidden>
+    <div class="sheet">
+      <div class="row spread">
+        <div>
+          <div class="eyebrow">PAUS</div>
+          <h2>Skogsboken</h2>
+        </div>
+        <button class="pbtn primary" id="btn-resume" type="button">Fortsätt spela</button>
+      </div>
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" data-tab="comps" aria-selected="true" type="button">KOMPISAR</button>
+        <button class="tab" role="tab" data-tab="map" aria-selected="false" type="button">KARTA</button>
+        <button class="tab" role="tab" data-tab="help" aria-selected="false" type="button">HJÄLP</button>
+        <button class="tab" role="tab" data-tab="test" aria-selected="false" type="button">TESTLÄGE</button>
+      </div>
+      <div id="tab-comps"></div>
+      <div id="tab-map" hidden></div>
+      <div id="tab-help" hidden></div>
+      <div id="tab-test" hidden></div>
+      <div class="row">
+        <button class="pbtn" id="btn-sound" type="button">Ljud: på</button>
+        <button class="pbtn" id="btn-home" type="button">Återvänd till Skogsbasen</button>
+        <button class="pbtn danger" id="btn-new" type="button">Nytt spel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Smedjan -->
+  <div class="panel" id="panel-forge" hidden>
+    <div class="sheet">
+      <div class="row spread">
+        <div>
+          <div class="eyebrow">SKOGSBASEN</div>
+          <h2>Smedjan</h2>
+        </div>
+        <div class="row">
+          <span class="cost" id="forge-res"></span>
+          <button class="pbtn primary" id="btn-forge-close" type="button">Klar</button>
+        </div>
+      </div>
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" data-ftab="armor" aria-selected="true" type="button">RUSTNING</button>
+        <button class="tab" role="tab" data-ftab="weapons" aria-selected="false" type="button">VAPEN &amp; UTRUSTNING</button>
+      </div>
+      <div id="ftab-armor"></div>
+      <div id="ftab-weapons" hidden></div>
+    </div>
+  </div>
+
+  <!-- Seger -->
+  <div class="panel" id="panel-win" hidden>
+    <div class="sheet">
+      <div class="eyebrow">URKÄRNAN ÄR VAKEN</div>
+      <h2>Skölden är uppe – skogen är räddad!</h2>
+      <p id="win-text"></p>
+      <div class="row"><button class="pbtn primary" id="btn-win-close" type="button">Fortsätt utforska</button></div>
+    </div>
+  </div>
+
+  <!-- Bekräftelse -->
+  <div class="panel" id="panel-confirm" hidden>
+    <div class="sheet" style="width:min(420px,100%)">
+      <h3 id="confirm-text">Är du säker?</h3>
+      <div class="row">
+        <button class="pbtn danger" id="btn-confirm-yes" type="button">Ja</button>
+        <button class="pbtn" id="btn-confirm-no" type="button">Avbryt</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/core.js"></script>
+<script src="js/input.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/art.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/world.js"></script>
+<script src="js/environment.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/companions.js"></script>
+<script src="js/forge.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
