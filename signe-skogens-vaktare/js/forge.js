@@ -1,11 +1,13 @@
 // forge.js – Smedjan i Skogsbasen: rustningsfärger (förvalda paletter och
-// fri målarverkstad) samt vapenuppgraderingar som betalas med skrot och kretsar.
+// fri målarverkstad) samt uppgraderingar som betalas med skrot och kretsar.
+// Färgerna går till ArmorColorShader i 3D-modellen via Player.setArmor.
 (function () {
   'use strict';
   const SV = window.SV;
 
   const PALETTES = [
-    { id: 'original', name: 'Signes original', helmet: '#339966', chest: '#cc8033', legs: '#3d4a7a', cost: 0 },
+    { id: 'original', name: 'Väktarens grönska', helmet: '#2f8a5a', chest: '#4fc27a', legs: '#3a4a6a', cost: 0 },
+    { id: 'opal', name: 'Opalalv', helmet: '#c8b0f0', chest: '#f4e8ff', legs: '#8a7ac8', cost: 6 },
     { id: 'mossvaktare', name: 'Mossväktare', helmet: '#4a6b3a', chest: '#6b5a3a', legs: '#3b4d2e', cost: 6 },
     { id: 'lavskog', name: 'Lavskog', helmet: '#76875a', chest: '#5c6e45', legs: '#6e5f45', cost: 6 },
     { id: 'norrsken', name: 'Neonnorrsken', helmet: '#39ff9a', chest: '#ff3df0', legs: '#3dd8ff', cost: 8 },
@@ -20,18 +22,18 @@
 
   const UPGRADES = [
     {
-      stat: 'staff', name: 'El-stav', max: 5,
+      stat: 'staff', name: 'Väktarbågens elhugg', max: 5,
       desc: (p) => `Skada ${p.staffDamage()} · EMP-radie ${p.empRadius()}`,
       costs: [{ scrap: 10 }, { scrap: 18, chips: 1 }, { scrap: 28, chips: 3 }, { scrap: 40, chips: 5 }],
     },
     {
-      stat: 'frost', name: 'Fryskastare', max: 5,
+      stat: 'frost', name: 'Frostpilar', max: 5,
       desc: (p) => `Kyla per träff ${p.frostChill().toFixed(1)} · Frystid ${p.frostDuration().toFixed(1)} s`,
       costs: [{ scrap: 10 }, { scrap: 18, chips: 1 }, { scrap: 28, chips: 3 }, { scrap: 40, chips: 5 }],
     },
     {
-      stat: 'cool', name: 'Kyltank', max: 4,
-      desc: (p) => `${p.maxCoolant} kvävesalvor innan omladdning`,
+      stat: 'cool', name: 'Pilkoger', max: 4,
+      desc: (p) => `${p.maxCoolant} frostpilar innan kogret måste fyllas på`,
       costs: [{ scrap: 8 }, { scrap: 16, chips: 1 }, { scrap: 26, chips: 2 }],
     },
     {
@@ -55,8 +57,7 @@
       return true;
     },
     costHtml(p, cost) {
-      const icons = SV.UI.icons;
-      const part = (n, key, have) => `<span class="${have < n ? 'short' : ''}"><img src="${icons[key]}" alt="">${n}</span>`;
+      const part = (n, key, have) => `<span class="${have < n ? 'short' : ''}"><i class="ic ic-${key}"></i>${n}</span>`;
       let s = '';
       if (cost.scrap) s += part(cost.scrap, 'scrap', p.scrap);
       if (cost.chips) s += part(cost.chips, 'chip', p.chips);
@@ -70,6 +71,7 @@
       document.getElementById('panel-forge').hidden = false;
       this.render();
       this._previewLoop();
+      SV.UI.focusPanel(document.getElementById('panel-forge'));
     },
     close() {
       document.getElementById('panel-forge').hidden = true;
@@ -87,8 +89,7 @@
 
     render() {
       const p = this.game.player;
-      const icons = SV.UI.icons;
-      document.getElementById('forge-res').innerHTML = `<span><img src="${icons.scrap}" alt="">${p.scrap} skrot</span><span><img src="${icons.chip}" alt="">${p.chips} kretsar</span>`;
+      document.getElementById('forge-res').innerHTML = `<span><i class="ic ic-scrap"></i>${p.scrap} skrot</span><span><i class="ic ic-chip"></i>${p.chips} kretsar</span>`;
       if (this.tab === 'armor') this.renderArmor();
       else this.renderWeapons();
     },
@@ -114,7 +115,7 @@
         : `<div class="row spread"><p>Lås upp ett fritt RGB/HEX-färghjul för hjälm, bröstplåt och ben.</p><div class="row">${this.costHtml(p, PAINTER_COST)}<button class="pbtn" type="button" id="btn-unlock-painter" ${this.canAfford(p, PAINTER_COST) ? '' : 'disabled'}>Lås upp</button></div></div>`;
       el.innerHTML = `<div class="forge-grid">
         <div style="display:flex;flex-direction:column;gap:10px">
-          <canvas id="forge-preview" width="60" height="80"></canvas>
+          <canvas id="forge-preview" width="300" height="400"></canvas>
           <div class="style-badge" data-style="${style.id}"><b>${style.name}</b><small>${style.effect}</small></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:12px">
@@ -183,7 +184,7 @@
           <button class="pbtn" type="button" data-upg="${u.stat}" ${maxed || !this.canAfford(p, cost) ? 'disabled' : ''}>Uppgradera</button></div>
         </div>`;
       }).join('')}</div>
-      <p>Besegrade robotar tappar skrot och ibland kretsar. Skrothögar i Järnforsen ger lite extra om du ger dem en stöt med El-staven.</p>`;
+      <p>Kortslutna robotar tappar skrot och ibland kretsar. Skrothögar i Järnforsen ger lite extra om du ger dem ett elhugg.</p>`;
       el.querySelectorAll('[data-upg]').forEach((b) =>
         b.addEventListener('click', () => {
           const u = UPGRADES.find((x) => x.stat === b.dataset.upg);
@@ -200,27 +201,13 @@
     },
 
     _previewLoop() {
-      const dirs = ['down', 'right', 'up', 'left'];
-      let t = 0, last = performance.now();
+      const t0 = performance.now();
       const step = (now) => {
-        t += Math.max(0, now - last) / 1000;
-        last = now;
         const c = document.getElementById('forge-preview');
-        const p = this.game.player;
-        if (c && p.frames) {
-          const g = c.getContext('2d');
-          g.imageSmoothingEnabled = false;
-          g.clearRect(0, 0, c.width, c.height);
-          const dir = dirs[Math.floor(t / 1.4) % 4];
-          const frame = p.frames[dir][Math.floor(t * 5) % 3];
-          g.fillStyle = 'rgba(0,0,0,0.3)';
-          g.beginPath();
-          g.ellipse(30, 72, 16, 4, 0, 0, Math.PI * 2);
-          g.fill();
-          g.drawImage(frame, 30 - frame.width * 1.5, 72 - frame.height * 3, frame.width * 3, frame.height * 3);
-        }
+        if (c && SV.View.ready) SV.View.renderPreview(c, 'signe', { rot: 0.3 + ((now - t0) / 1000) * 0.7 });
         this._raf = requestAnimationFrame(step);
       };
+      cancelAnimationFrame(this._raf);
       this._raf = requestAnimationFrame(step);
     },
   };

@@ -1,18 +1,20 @@
-// input.js – virtuell analogspak, aktionsknappar och tangentbord.
-// Varje handling har tillstånden down / pressed (denna bildruta) / released.
+// input.js – tangentbord, mus och handkontroll (Gamepad API, standardlayout
+// för Xbox/PlayStation). Alla enheter skriver till samma handlingar så att
+// spellogiken inte bryr sig om vad som styr. Pekskärm: se input-touch.js.
 (function () {
   'use strict';
   const SV = window.SV;
 
-  const ACTS = ['staff', 'frost', 'coop', 'super', 'interact', 'swap', 'menu'];
+  const ACTS = ['staff', 'frost', 'coop', 'super', 'interact', 'swap', 'menu', 'map', 'ui_up', 'ui_down', 'ui_left', 'ui_right', 'ui_accept', 'ui_back'];
   const KEYS = {
-    KeyJ: 'staff', KeyZ: 'staff',
-    KeyK: 'frost', KeyX: 'frost',
-    KeyL: 'coop', KeyC: 'coop',
-    Space: 'super',
+    KeyJ: 'staff',
+    KeyK: 'frost', Space: 'frost',
+    KeyQ: 'coop',
+    KeyF: 'super',
     KeyE: 'interact', Enter: 'interact',
-    KeyQ: 'swap',
+    Tab: 'swap',
     Escape: 'menu', KeyP: 'menu',
+    KeyM: 'map',
   };
   const MOVE = {
     KeyW: [0, -1], ArrowUp: [0, -1],
@@ -20,20 +22,76 @@
     KeyA: [-1, 0], ArrowLeft: [-1, 0],
     KeyD: [1, 0], ArrowRight: [1, 0],
   };
+  const UI_KEYS = { ArrowUp: 'ui_up', ArrowDown: 'ui_down', ArrowLeft: 'ui_left', ArrowRight: 'ui_right', Escape: 'ui_back' };
+  // Standardlayout: 0 A/Kryss, 1 B/Cirkel, 2 X/Fyrkant, 3 Y/Triangel, 4 LB, 5 RB,
+  // 6 LT, 7 RT, 8 Back/Share, 9 Start/Options, 12–15 styrkors.
+  const PAD = { 0: ['interact', 'ui_accept'], 1: ['ui_back'], 2: ['staff'], 3: ['swap'], 4: ['coop'], 5: ['super'], 6: ['coop'], 7: ['frost'], 8: ['map'], 9: ['menu'], 12: ['ui_up'], 13: ['ui_down'], 14: ['ui_left'], 15: ['ui_right'] };
+  const DEAD = 0.2;
 
   const Input = {
-    move: { x: 0, y: 0 },
-    stick: { active: false, id: null, ox: 0, oy: 0, x: 0, y: 0 },
+    move: { x: 0, y: 0 }, // skärmriktning, -1..1
+    aim: { mode: 'none', x: 0, y: 0 }, // 'mouse' (världspunkt i px), 'stick' (skärmriktning) eller 'none'
+    mouse: { x: 0, y: 0, inside: false, moved: 0 },
+    zoom: 0,
+    device: 'kbm', // 'kbm' | 'pad' | 'touch'
+    padName: '',
     state: {},
     keysDown: new Set(),
-    enabled: true,
+    uiMode: false,
+    touchMove: null,
+    onDeviceChange: null,
     onFirstInteraction: null,
+    _pad: {},
 
-    init(stickZone, stickBase, stickKnob, buttons) {
-      ACTS.forEach((a) => (this.state[a] = { down: false, pressed: false, released: false, t0: 0, held: 0 }));
-      this._initKeyboard();
-      this._initStick(stickZone, stickBase, stickKnob);
-      buttons.forEach((btn) => this._initButton(btn));
+    init(canvas) {
+      ACTS.forEach((a) => (this.state[a] = { down: false, pressed: false, released: false, t0: 0, held: 0, src: new Set() }));
+      window.addEventListener('keydown', (e) => {
+        if (e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+        this._setDevice('kbm');
+        // i menyer sköter webbläsaren Tab/Enter/mellanslag (fokus och klick)
+        if (this.uiMode && (e.code === 'Tab' || e.code === 'Enter' || e.code === 'Space')) return;
+        if (UI_KEYS[e.code] && !e.repeat) this.press(UI_KEYS[e.code], 'k' + e.code);
+        if (MOVE[e.code]) {
+          this.keysDown.add(e.code);
+          e.preventDefault();
+        } else if (KEYS[e.code]) {
+          if (!e.repeat) this.press(KEYS[e.code], 'k' + e.code);
+          e.preventDefault();
+        }
+      });
+      window.addEventListener('keyup', (e) => {
+        if (MOVE[e.code]) this.keysDown.delete(e.code);
+        if (KEYS[e.code]) this.release(KEYS[e.code], 'k' + e.code);
+        if (UI_KEYS[e.code]) this.release(UI_KEYS[e.code], 'k' + e.code);
+      });
+      window.addEventListener('blur', () => this.releaseAll());
+
+      canvas.addEventListener('mousemove', (e) => {
+        this.mouse.x = e.clientX;
+        this.mouse.y = e.clientY;
+        this.mouse.inside = true;
+        this.mouse.moved = performance.now();
+        this._setDevice('kbm');
+      });
+      canvas.addEventListener('mouseleave', () => (this.mouse.inside = false));
+      canvas.addEventListener('mousedown', (e) => {
+        this._setDevice('kbm');
+        if (e.button === 0) this.press('staff', 'm0');
+        if (e.button === 2) this.press('frost', 'm2');
+      });
+      window.addEventListener('mouseup', (e) => {
+        if (e.button === 0) this.release('staff', 'm0');
+        if (e.button === 2) this.release('frost', 'm2');
+      });
+      canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+      canvas.addEventListener('wheel', (e) => {
+        this.zoom += Math.sign(e.deltaY);
+        e.preventDefault();
+      }, { passive: false });
+      window.addEventListener('gamepadconnected', (e) => {
+        this.padName = e.gamepad.id;
+        this._setDevice('pad');
+      });
       const first = () => {
         if (this.onFirstInteraction) this.onFirstInteraction();
         window.removeEventListener('pointerdown', first, true);
@@ -43,69 +101,65 @@
       window.addEventListener('keydown', first, true);
     },
 
-    press(act) {
+    _setDevice(d) {
+      if (this.device === d) return;
+      this.device = d;
+      if (this.onDeviceChange) this.onDeviceChange(d);
+    },
+
+    // En handling kan hållas av flera källor samtidigt (t.ex. mus + tangent).
+    press(act, src = 'x') {
       const s = this.state[act];
-      if (!s || s.down) return;
+      if (!s) return;
+      s.src.add(src);
+      if (s.down) return;
       s.down = true;
       s.pressed = true;
       s.t0 = performance.now();
     },
-    release(act) {
+    release(act, src = 'x') {
       const s = this.state[act];
-      if (!s || !s.down) return;
+      if (!s) return;
+      s.src.delete(src);
+      if (!s.down || s.src.size) return;
       s.down = false;
       s.released = true;
       s.held = (performance.now() - s.t0) / 1000;
     },
     down(act) {
-      return this.enabled && this.state[act].down;
+      return this.state[act].down;
     },
     pressed(act) {
-      return this.enabled && this.state[act].pressed;
+      return this.state[act].pressed;
     },
     released(act) {
-      return this.enabled && this.state[act].released;
+      return this.state[act].released;
     },
     holdTime(act) {
       const s = this.state[act];
       return s.down ? (performance.now() - s.t0) / 1000 : s.held;
     },
-    // Anropas sist i varje bildruta.
     endFrame() {
       ACTS.forEach((a) => {
         this.state[a].pressed = false;
         this.state[a].released = false;
       });
+      this.zoom = 0;
     },
     releaseAll() {
-      ACTS.forEach((a) => this.release(a));
-      this.keysDown.clear();
-      this._endStick();
-      this._updateKeyboardMove();
-    },
-
-    _initKeyboard() {
-      window.addEventListener('keydown', (e) => {
-        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
-        if (MOVE[e.code]) {
-          this.keysDown.add(e.code);
-          this._updateKeyboardMove();
-          e.preventDefault();
-        } else if (KEYS[e.code]) {
-          if (!e.repeat) this.press(KEYS[e.code]);
-          e.preventDefault();
+      ACTS.forEach((a) => {
+        this.state[a].src.clear();
+        if (this.state[a].down) {
+          this.state[a].down = false;
+          this.state[a].released = true;
         }
       });
-      window.addEventListener('keyup', (e) => {
-        if (MOVE[e.code]) {
-          this.keysDown.delete(e.code);
-          this._updateKeyboardMove();
-        } else if (KEYS[e.code]) this.release(KEYS[e.code]);
-      });
-      window.addEventListener('blur', () => this.releaseAll());
+      this.keysDown.clear();
     },
-    _updateKeyboardMove() {
-      if (this.stick.active) return;
+
+    // Anropas i början av varje bildruta.
+    poll() {
+      // tangentbord
       let x = 0, y = 0;
       this.keysDown.forEach((k) => {
         x += MOVE[k][0];
@@ -114,89 +168,65 @@
       const len = Math.hypot(x, y) || 1;
       this.move.x = x / len;
       this.move.y = y / len;
-    },
+      if (this.touchMove && (this.touchMove.x || this.touchMove.y)) {
+        this.move.x = this.touchMove.x;
+        this.move.y = this.touchMove.y;
+      }
+      this.aim.mode = this.device === 'kbm' && this.mouse.inside ? 'mouse' : 'none';
 
-    // Dynamisk spak: lägger sig där tummen landar i vänstra zonen.
-    _initStick(zone, base, knob) {
-      const R = 46; // radie i CSS-pixlar
-      this._stickEls = { base, knob };
-      zone.addEventListener('pointerdown', (e) => {
-        if (this.stick.active) return;
-        e.preventDefault();
-        zone.setPointerCapture(e.pointerId);
-        const st = this.stick;
-        st.active = true;
-        st.id = e.pointerId;
-        st.ox = e.clientX;
-        st.oy = e.clientY;
-        base.style.left = st.ox + 'px';
-        base.style.top = st.oy + 'px';
-        base.classList.add('on');
-        this._moveStick(e.clientX, e.clientY, R);
-      });
-      zone.addEventListener('pointermove', (e) => {
-        if (this.stick.active && e.pointerId === this.stick.id) this._moveStick(e.clientX, e.clientY, R);
-      });
-      const end = (e) => {
-        if (e.pointerId === this.stick.id) this._endStick();
+      // handkontroll
+      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      const pad = Array.from(pads || []).find((p) => p && p.connected);
+      if (!pad) return;
+      const ax = (i) => {
+        const v = pad.axes[i] || 0;
+        return Math.abs(v) < DEAD ? 0 : (v - Math.sign(v) * DEAD) / (1 - DEAD);
       };
-      zone.addEventListener('pointerup', end);
-      zone.addEventListener('pointercancel', end);
-    },
-    _moveStick(cx, cy, R) {
-      const st = this.stick;
-      let dx = cx - st.ox, dy = cy - st.oy;
-      const len = Math.hypot(dx, dy);
-      if (len > R) {
-        // Spaken följer med om tummen glider långt bort.
-        st.ox += (dx / len) * (len - R);
-        st.oy += (dy / len) * (len - R);
-        this._stickEls.base.style.left = st.ox + 'px';
-        this._stickEls.base.style.top = st.oy + 'px';
-        dx = cx - st.ox;
-        dy = cy - st.oy;
+      const lx = ax(0), ly = ax(1), rx = ax(2), ry = ax(3);
+      let any = Math.abs(lx) + Math.abs(ly) + Math.abs(rx) + Math.abs(ry) > 0;
+      if (lx || ly) {
+        const m = Math.min(1, Math.hypot(lx, ly));
+        const l = Math.hypot(lx, ly);
+        this.move.x = (lx / l) * m;
+        this.move.y = (ly / l) * m;
       }
-      const l2 = Math.hypot(dx, dy);
-      const dead = 6;
-      const mag = l2 < dead ? 0 : Math.min(1, (l2 - dead) / (R - dead));
-      this.move.x = l2 ? (dx / l2) * mag : 0;
-      this.move.y = l2 ? (dy / l2) * mag : 0;
-      this._stickEls.knob.style.transform = `translate(${dx}px, ${dy}px)`;
-    },
-    _endStick() {
-      const st = this.stick;
-      st.active = false;
-      st.id = null;
-      this.move.x = 0;
-      this.move.y = 0;
-      if (this._stickEls) {
-        this._stickEls.base.classList.remove('on');
-        this._stickEls.knob.style.transform = 'translate(0px, 0px)';
+      if (rx || ry) {
+        this.aim.mode = 'stick';
+        this.aim.x = rx;
+        this.aim.y = ry;
       }
-      this._updateKeyboardMove();
-    },
-
-    _initButton(btn) {
-      const act = btn.dataset.act;
-      btn.addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        try {
-          btn.setPointerCapture(e.pointerId);
-        } catch (err) {
-          /* äldre webbläsare */
+      // vänster spak navigerar menyer
+      const nav = { ui_up: ly < -0.6, ui_down: ly > 0.6, ui_left: lx < -0.6, ui_right: lx > 0.6 };
+      Object.entries(nav).forEach(([act, on]) => {
+        const key = 'stick-' + act;
+        if (on && !this._pad[key]) this.press(act, key);
+        if (!on && this._pad[key]) this.release(act, key);
+        this._pad[key] = on;
+      });
+      pad.buttons.forEach((b, i) => {
+        const on = b.pressed || b.value > 0.5;
+        const was = !!this._pad[i];
+        if (on !== was) {
+          any = true;
+          (PAD[i] || []).forEach((act) => (on ? this.press(act, 'p' + i) : this.release(act, 'p' + i)));
         }
-        btn.classList.add('held');
-        this.press(act);
+        this._pad[i] = on;
       });
-      const up = (e) => {
-        e.preventDefault();
-        btn.classList.remove('held');
-        this.release(act);
+      if (any) {
+        this.padName = pad.id;
+        this._setDevice('pad');
+      }
+    },
+
+    // Knappnamn för hjälptexter, beroende på vad spelaren använder.
+    label(act) {
+      const ps = /054c|playstation|dualsense|dualshock/i.test(this.padName);
+      const pad = {
+        staff: ps ? '□' : 'X', frost: ps ? 'R2' : 'RT', coop: ps ? 'L1' : 'LB', super: ps ? 'R1' : 'RB',
+        interact: ps ? '✕' : 'A', swap: ps ? '△' : 'Y', menu: ps ? 'Options' : 'Start', map: ps ? 'Share' : 'Back',
       };
-      btn.addEventListener('pointerup', up);
-      btn.addEventListener('pointercancel', up);
-      btn.addEventListener('contextmenu', (e) => e.preventDefault());
+      const kbm = { staff: 'Vänsterklick', frost: 'Högerklick', coop: 'Q', super: 'F', interact: 'E', swap: 'Tab', menu: 'Esc', map: 'M' };
+      return (this.device === 'pad' ? pad : kbm)[act] || '';
     },
   };
 

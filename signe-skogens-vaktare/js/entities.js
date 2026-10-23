@@ -1,6 +1,6 @@
-// entities.js – Signe (Player), robotfiender, projektiler, upplockbara
-// föremål och effekter. Ingen ritlogik här kräver DOM, så testerna kan köra
-// klasserna i Node.
+// entities.js – Signe (Player) och robotfiender. Ren spellogik i världens
+// px-koordinater (16 px per ruta); 3D-vyn läser positionerna. Ingen DOM här,
+// så testerna kan köra klasserna i Node.
 (function () {
   'use strict';
   const SV = window.SV;
@@ -57,7 +57,7 @@
       this.stats = { staff: 1, frost: 1, cool: 1, plate: 1 };
       this.scrap = 0;
       this.chips = 0;
-      this.armor = { helmet: '#339966', chest: '#cc8033', legs: '#3d4a7a' };
+      this.armor = { helmet: '#2f8a5a', chest: '#4fc27a', legs: '#3a4a6a' };
       this.unlockedPalettes = ['original'];
       this.painterUnlocked = false;
       this.style = ArmorStyle.classify(this.armor);
@@ -85,7 +85,7 @@
     setArmor(armor) {
       this.armor = Object.assign({}, armor);
       this.style = ArmorStyle.classify(this.armor);
-      if (typeof document !== 'undefined' && SV.SPR && SV.SPR.buildSigne) this.frames = SV.SPR.buildSigne(this.armor);
+      if (SV.View && SV.View.onArmorChanged) SV.View.onArmorChanged(this.armor);
     }
 
     // GDD: player.apply_energy_shield(2)
@@ -103,19 +103,25 @@
 
     update(dt, game) {
       const In = SV.Input;
-      const mx = In.move.x, my = In.move.y;
+      // skärmriktning → världsriktning (den isometriska kameran är vriden)
+      const [mx, my] = game.toWorldDir(In.move.x, In.move.y);
       const mag = Math.hypot(mx, my);
       this.moving = mag > 0.05;
-      if (this.moving) {
-        this.face = Math.atan2(my, mx);
-        if (Math.abs(mx) > Math.abs(my) * 0.9) this.dir = mx > 0 ? 'right' : 'left';
-        else this.dir = my > 0 ? 'down' : 'up';
-      }
+      this.moveDir = this.moving ? Math.atan2(my, mx) : this.moveDir || this.face;
+      this.aimed = false;
+      if (In.aim.mode === 'mouse') {
+        this.face = Math.atan2(In.aim.y - this.y, In.aim.x - this.x);
+        this.aimed = true;
+      } else if (In.aim.mode === 'stick') {
+        const [ax, ay] = game.toWorldDir(In.aim.x, In.aim.y);
+        this.face = Math.atan2(ay, ax);
+        this.aimed = true;
+      } else if (this.moving) this.face = this.moveDir;
       const charging = In.down('staff') && In.holdTime('staff') > 0.3;
       const sp = this.speed * this.terrainSpeed(game) * (charging ? 0.5 : 1) * Math.min(1, mag);
       const opts = { hiddenOpen: game.companions.hiddenPathsOpen() };
-      const dx = (this.moving ? Math.cos(this.face) * sp : 0) * dt + this.knock.x * dt;
-      const dy = (this.moving ? Math.sin(this.face) * sp : 0) * dt + this.knock.y * dt;
+      const dx = (this.moving ? Math.cos(this.moveDir) * sp : 0) * dt + this.knock.x * dt;
+      const dy = (this.moving ? Math.sin(this.moveDir) * sp : 0) * dt + this.knock.y * dt;
       const wasHidden = game.world.groundAtPx(this.x, this.y) === SV.G.HIDDEN;
       game.world.moveBody(this, dx, dy, 4, 3, opts);
       if (!wasHidden && game.world.groundAtPx(this.x, this.y) === SV.G.HIDDEN) game.onHiddenPath();
@@ -129,6 +135,7 @@
       this.empCd = Math.max(0, this.empCd - dt);
       this.frostCd = Math.max(0, this.frostCd - dt);
       this.swing = Math.max(0, this.swing - dt);
+      this.shot = Math.max(0, (this.shot || 0) - dt);
 
       // Kylvätska återhämtar sig.
       if (this.coolant < this.maxCoolant) {
@@ -147,11 +154,11 @@
         if (this.waterTimer > 2.5) {
           this.waterTimer = 0;
           this.hurt(1, game, { electric: false, silent: true, x: this.x, y: this.y });
-          game.floater(this.x, this.y - 20, 'Kallt!', '#9fe6ff');
+          game.floater(this.x, this.y, 'Kallt!', '#9fe6ff');
         }
       } else this.waterTimer = 0;
 
-      // El-staven: snabb stöt direkt, laddad EMP när knappen släpps.
+      // Elhugg med bågens bladkanter direkt, laddad EMP när knappen släpps.
       if (In.pressed('staff') && this.staffCd <= 0) this.strike(game);
       if (charging && this.empCd <= 0) {
         this.chargeFx += dt;
@@ -162,12 +169,12 @@
         this.chargeFx = 0;
       }
 
-      // Fryskastaren: håll in för automateld.
+      // Frostpilar: håll in för att skjuta i följd.
       if ((In.pressed('frost') || In.down('frost')) && this.frostCd <= 0) {
         if (this.coolant >= 1) this.fireFrost(game);
         else if (In.pressed('frost')) {
           SV.Sfx.play('deny');
-          game.floater(this.x, this.y - 22, 'Slut på kyla', '#9fe6ff');
+          game.floater(this.x, this.y, 'Slut på kyla', '#9fe6ff');
         }
       }
     }
@@ -177,13 +184,13 @@
       this.swing = 0.18;
       SV.Sfx.play('zap');
       const reach = 24;
-      const hx = this.x + Math.cos(this.face) * 10, hy = this.y - 6 + Math.sin(this.face) * 10;
-      game.addFx({ type: 'arc', x: this.x, y: this.y - 6, a: this.face, life: 0.15, t: 0 });
+      const hx = this.x + Math.cos(this.face) * 10, hy = this.y + Math.sin(this.face) * 10;
+      game.addFx({ type: 'arc', x: this.x, y: this.y, a: this.face, life: 0.22, t: 0 });
       let hitAny = false;
       game.robots.forEach((r) => {
         if (r.state === 'disabled') return;
-        const d = SV.dist(this.x, this.y - 6, r.x, r.y - r.h / 2);
-        const ang = Math.atan2(r.y - r.h / 2 - (this.y - 6), r.x - this.x);
+        const d = SV.dist(this.x, this.y, r.x, r.y);
+        const ang = Math.atan2(r.y - this.y, r.x - this.x);
         if (d < reach + r.r && (d < 12 || Math.abs(SV.angleDiff(this.face, ang)) < 1.25)) {
           r.takeDamage(this.staffDamage(), 'shock', game, this);
           hitAny = true;
@@ -209,7 +216,7 @@
       const R = this.empRadius();
       SV.Sfx.play('emp');
       game.shake(4);
-      game.addFx({ type: 'ring', x: this.x, y: this.y - 6, r0: 4, r1: R, life: 0.45, t: 0, col: '#7ff3ff' });
+      game.addFx({ type: 'ring', x: this.x, y: this.y, r0: 4, r1: R, life: 0.45, t: 0, col: '#7ff3ff' });
       game.robots.forEach((r) => {
         if (r.state === 'disabled') return;
         if (SV.dist(this.x, this.y, r.x, r.y) < R + r.r) {
@@ -226,13 +233,13 @@
       this.coolant -= 1;
       this.coolTimer = 0;
       SV.Sfx.play('frost');
-      // Siktesstöd: närmaste robot inom en kon framåt.
+      // Siktesstöd när man inte siktar med mus/spak: närmaste robot framåt.
       let best = null, bestScore = Infinity;
       game.robots.forEach((r) => {
-        if (r.state === 'disabled') return;
+        if (r.state === 'disabled' || this.aimed) return;
         const d = SV.dist(this.x, this.y, r.x, r.y);
         if (d > 150) return;
-        const ang = Math.atan2(r.y - r.h / 2 - (this.y - 6), r.x - this.x);
+        const ang = Math.atan2(r.y - this.y, r.x - this.x);
         const diff = Math.abs(SV.angleDiff(this.face, ang));
         if (diff > 1.0) return;
         const score = d + diff * 60;
@@ -242,7 +249,9 @@
         }
       });
       const a = best !== null ? best : this.face;
-      game.projectiles.push({ kind: 'frost', x: this.x + Math.cos(a) * 8, y: this.y - 6 + Math.sin(a) * 8, vx: Math.cos(a) * 170, vy: Math.sin(a) * 170, life: 0.85, r: 4, trail: 0 });
+      this.face = a;
+      this.shot = 0.25;
+      game.projectiles.push({ kind: 'frost', x: this.x + Math.cos(a) * 8, y: this.y + Math.sin(a) * 8, vx: Math.cos(a) * 190, vy: Math.sin(a) * 190, a, life: 0.8, r: 4, trail: 0 });
     }
 
     hurt(dmg, game, src = {}) {
@@ -250,8 +259,8 @@
       if (this.shield > 0 && !src.silent) {
         this.shield--;
         this.invuln = 0.6;
-        game.addFx({ type: 'ring', x: this.x, y: this.y - 8, r0: 8, r1: 18, life: 0.3, t: 0, col: '#ffd25e' });
-        game.floater(this.x, this.y - 24, 'Sköld!', '#ffd25e');
+        game.addFx({ type: 'ring', x: this.x, y: this.y, r0: 8, r1: 18, life: 0.3, t: 0, col: '#ffd25e' });
+        game.floater(this.x, this.y, 'Sköld!', '#ffd25e');
         return false;
       }
       let amount = dmg;
@@ -368,7 +377,7 @@
       const mult = opts.doubleLoot ? 2 : 1;
       const scrap = Math.round(SV.lerp(this.def.scrap[0], this.def.scrap[1] + 0.99, rnd()) - 0.49) * mult;
       const chips = Math.floor(SV.lerp(this.def.chips[0], this.def.chips[1] + 0.99, rnd())) * mult;
-      game.spawnLoot(this.x, this.y - 2, { scrap, chips });
+      game.spawnLoot(this.x, this.y, { scrap, chips });
       game.onRobotDisabled(this);
     }
 
@@ -500,8 +509,8 @@
             this.fireCd -= dt;
             if (this.fireCd <= 0 && d < 130 && isPlayer) {
               this.fireCd = 1.7;
-              const aa = Math.atan2(p.y - 6 - (this.y - 14), p.x - this.x);
-              game.projectiles.push({ kind: 'bolt', x: this.x, y: this.y - 14, vx: Math.cos(aa) * 80, vy: Math.sin(aa) * 80, life: 2, r: 3, dmg: this.def.dmg });
+              const aa = Math.atan2(p.y - this.y, p.x - this.x);
+              game.projectiles.push({ kind: 'bolt', x: this.x, y: this.y, vx: Math.cos(aa) * 80, vy: Math.sin(aa) * 80, life: 2, r: 3, dmg: this.def.dmg });
               SV.Sfx.play('zap');
             }
           } else {
@@ -563,15 +572,7 @@
         this.avoidSide = Math.random() < 0.5 ? 1 : -1;
       }
       if (Math.abs(dx) > 1) this.dirX = dx > 0 ? 1 : -1;
-    }
-
-    spriteSet() {
-      const set = SV.SPR.robots[this.type][this.dirX > 0 ? 'right' : 'left'];
-      if (this.flash > 0) return set.flash;
-      if (this.frozen > 0) return set.frozen;
-      if (this.stun > 0 || this.state === 'disabled' || this.blind > 0) return set.stunned;
-      if (this.state === 'patrol' || this.state === 'flee') return set.patrol;
-      return set.alert;
+      this.heading = Math.atan2(dy, dx);
     }
   }
 

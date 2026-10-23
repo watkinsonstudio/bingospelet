@@ -1,13 +1,14 @@
-// game.js – spelloop, kamera, rendering och spelregler. Scenstrukturen
-// följer GDD §6: Player, CompanionManager och EnvironmentController är
-// fristående delar som Game knyter ihop.
+// game.js – spelloop och spelregler. Scenstrukturen följer GDD §6:
+// Player, CompanionManager och EnvironmentController är fristående delar som
+// Game knyter ihop. All grafik ligger i js3d/ (SV.View), så logiken kan
+// flyttas till en annan motor eller plattform utan att skrivas om.
 (function () {
   'use strict';
   const SV = window.SV;
   const T = SV.TILE;
   const G = SV.G, B = SV.B;
   const $ = (id) => document.getElementById(id);
-  const SAVE_KEY = 'signe-skogens-vaktare-v1';
+  const SAVE_KEY = 'signe-skogens-vaktare-3d-v1';
 
   const Game = {
     CRYSTALS_NEEDED: 8,
@@ -15,22 +16,21 @@
     time: 0,
     paused: true,
     started: false,
+    camYaw: Math.PI / 4, // isometrisk kameravinkel (sätts av vyn)
 
     // ================================================================
     // Uppstart
     // ================================================================
     init(hotData) {
-      SV.Sprites.build();
       this.canvas = $('view');
-      this.ctx = this.canvas.getContext('2d');
-      this.resize();
-      window.addEventListener('resize', () => this.resize());
       SV.UI.init(this);
-      SV.Input.init($('stick-zone'), $('stick-base'), $('stick-knob'), Array.from(document.querySelectorAll('[data-act]')));
+      SV.Input.init(this.canvas);
       SV.Input.onFirstInteraction = () => SV.Sfx.unlock();
+      SV.Input.onDeviceChange = () => SV.UI.refreshPrompts();
 
       const save = (hotData && hotData.save) || SV.store.get(SAVE_KEY);
       this.newState(null);
+      SV.View.init(this, this.canvas);
       $('btn-continue').hidden = !save;
       $('btn-start').addEventListener('click', () => {
         SV.Sfx.unlock();
@@ -44,11 +44,12 @@
       document.addEventListener('visibilitychange', () => {
         if (document.hidden && this.started) this.save();
       });
+      SV.UI.focusPanel($('panel-title'));
       if (hotData && hotData.save && hotData.running) this.startGame(hotData.save);
 
       this.last = performance.now();
       const loop = (now) => {
-        this.dt = Math.min(0.05, (now - this.last) / 1000);
+        this.dt = Math.min(0.05, Math.max(0, now - this.last) / 1000);
         this.last = now;
         this.frame();
         requestAnimationFrame(loop);
@@ -56,12 +57,10 @@
       requestAnimationFrame(loop);
     },
 
-    resize() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 3);
-      const w = Math.floor(window.innerWidth * dpr), h = Math.floor(window.innerHeight * dpr);
-      this.canvas.width = w;
-      this.canvas.height = h;
-      this.zoom = Math.max(2, Math.round(Math.min(w, h) / (T * 12.5)));
+    // Skärmriktning (upp = bort från kameran) → riktning i världen.
+    toWorldDir(sx, sy) {
+      const c = Math.cos(this.camYaw), s = Math.sin(this.camYaw);
+      return [c * sx + s * sy, -s * sx + c * sy];
     },
 
     newState(save) {
@@ -72,14 +71,14 @@
       this.env._updateEnvironment();
       const sp = this.world.spawn;
       this.player = new SV.Player(sp.x, sp.y);
-      this.player.setArmor(this.player.armor);
+      this.player.face = -Math.PI * 0.75;
       this.companions = new SV.CompanionManager(this);
       this.companions.on('level_changed', (c, lvl) => {
         SV.Sfx.play('level');
         SV.UI.banner(c.companion_name.toUpperCase() + ' NÅR NIVÅ ' + lvl, SV.LEVEL_TITLES[lvl - 1]);
-        this.addFx({ type: 'ring', x: c.x, y: c.y - 6, r0: 2, r1: 30, life: 0.6, t: 0, col: lvl === 3 ? '#ffd25e' : '#8fcf6a', thick: 2 });
+        this.addFx({ type: 'ring', x: c.x, y: c.y, r0: 2, r1: 30, life: 0.6, t: 0, col: lvl === 3 ? '#ffd25e' : '#8fcf6a', thick: 2 });
       });
-      this.companions.on('super_ready', (c) => SV.UI.toast(`${c.info.super.name} är redo! Tryck på Super.`));
+      this.companions.on('super_ready', (c) => SV.UI.toast(`${c.info.super.name} är redo! Tryck ${SV.Input.label('super')}.`));
       this.companions.unlock('dog', true);
       this.robots = this.world.spawns.map((s) => new SV.Robot(s.type, s.x, s.y));
       this.pickups = [];
@@ -95,16 +94,17 @@
       this.saveT = 0;
       this.screenFlash = 0;
       this.shakeAmt = 0;
+      this.inGrotto = false;
       this.stats = { robots: 0, start: Date.now() };
       this.hiddenBonus = false;
       this.reinforceToast = false;
       this.env.on('lightning', (x, y) => this.onLightning(x, y));
       if (save) this.applySave(save);
-      this.world.initFog();
+      this.player.setArmor(this.player.armor);
       this.world.reveal(this.player.x, this.player.y, this.companions.revealRadius());
-      this.cam = { x: this.player.x, y: this.player.y - 8 };
       this.computeTileColors();
       this.rebuildMinimap();
+      if (SV.View && SV.View.ready) SV.View.onNewState(this);
     },
 
     startGame(save) {
@@ -116,7 +116,7 @@
       this.pause(false);
       if (!save) {
         SV.UI.banner('SEKTOR', 'Mossdalen');
-        setTimeout(() => SV.UI.dialog('<b>Signe:</b> Stormen laddar upp sig över skogen. Hunden och jag måste hitta energikristaller innan den växer sig för stark. Smedjan här i Skogsbasen hjälper mig bygga om utrustningen.'), 1600);
+        setTimeout(() => this.say(this.player.x, this.player.y, '<b>Signe:</b> Tidsstormen laddar upp sig över skogen. Hunden och jag måste hitta energikristallerna i grottorna innan den växer sig för stark. Smedjan här i Skogsbasen hjälper mig rusta upp.'), 1600);
       } else SV.UI.toast('Välkommen tillbaka till skogen!');
     },
 
@@ -135,26 +135,40 @@
     // ================================================================
     frame() {
       const In = SV.Input;
-      if (In.pressed('menu') && this.started) {
-        if (!$('panel-forge').hidden) SV.Forge.close();
-        else if (!$('panel-menu').hidden) SV.UI.closeMenu();
-        else if ($('panel-win').hidden && $('panel-confirm').hidden) SV.UI.openMenu();
-      }
+      In.poll();
+      this.handleMenuKeys();
+      SV.UI.navigate();
       this.time += this.dt;
       if (!this.paused) this.update(this.dt);
-      else {
-        // titelskärmen: låt stormen och partiklarna leva
-        this.env.update(this.dt, this.view || { x: 0, y: 0, w: 300, h: 200 });
-      }
-      this.render();
+      else this.env.update(this.dt, this.player);
+      SV.View.render(this, this.dt);
       In.endFrame();
+    },
+
+    handleMenuKeys() {
+      const In = SV.Input;
+      const open = (id) => !$(id).hidden;
+      const back = In.pressed('ui_back'), menu = In.pressed('menu');
+      if (!back && !menu && !In.pressed('map')) return;
+      if (open('panel-confirm')) {
+        if (back || menu) $('panel-confirm').hidden = true;
+      } else if (open('panel-forge')) {
+        if (back || menu) SV.Forge.close();
+      } else if (open('panel-menu')) {
+        if (back || menu) SV.UI.closeMenu();
+      } else if (open('panel-win')) {
+        if (back || menu) $('btn-win-close').click();
+      } else if (this.started) {
+        if (SV.UI.dialogOpen && (back || menu)) SV.UI.closeDialog();
+        else if (menu) SV.UI.openMenu();
+        else if (In.pressed('map')) SV.UI.openMenu('map');
+      }
     },
 
     update(dt) {
       const In = SV.Input;
       const p = this.player;
-      this.env.snowy = this.player.y < 46 * T;
-      this.env.update(dt, this.view);
+      this.env.update(dt, p);
 
       if (this.playerDown) {
         this.downT -= dt;
@@ -217,6 +231,20 @@
         }
       }
 
+      // Kristallgrottorna: lila ljus och närmare kamera inne i grottan.
+      const cave = this.world.inGrotto(p.x, p.y);
+      if (cave !== this.inGrotto) {
+        this.inGrotto = cave;
+        if (cave) {
+          const g = this.world.grottos.find((q) => Math.hypot(q.x + 0.5 - p.x / T, q.y + 0.5 - p.y / T) < q.r + 3);
+          if (g && !g.visited) {
+            g.visited = true;
+            SV.UI.banner('DU HAR HITTAT', 'En kristallgrotta');
+            SV.Sfx.play('crystal');
+          }
+        }
+      }
+
       // Kristaller plockas upp när Signe går fram till dem.
       this.world.crystals.forEach((cr) => {
         if (!cr.taken && !cr.buried && SV.dist(cr.x, cr.y, p.x, p.y) < 13) this.takeCrystal(cr);
@@ -230,7 +258,7 @@
         if (this.campT > 0.8) {
           this.campT = 0;
           p.energy = Math.min(p.maxEnergy, p.energy + 1);
-          this.floater(p.x, p.y - 22, '+1', '#5ef59a');
+          this.floater(p.x, p.y, '+1', '#5ef59a');
         }
       }
 
@@ -276,6 +304,7 @@
     // ================================================================
     onReveal(n, fromCoop) {
       this.env.storm_intensity += n * 0.00009;
+      this.fogDirty = true;
       this.companions.addXp(n * (fromCoop ? 0.08 : 0.2));
       this.miniDirty = true;
     },
@@ -288,8 +317,8 @@
       cr.taken = true;
       this.env.storm_intensity -= 0.12;
       SV.Sfx.play('crystal');
-      this.addFx({ type: 'ring', x: cr.x, y: cr.y - 8, r0: 2, r1: 46, life: 0.7, t: 0, col: '#7ff3ff', thick: 2 });
-      this.addFx({ type: 'sparks', x: cr.x, y: cr.y - 8, life: 0.8, t: 0, n: 18, col: '#b6f7ff' });
+      this.addFx({ type: 'ring', x: cr.x, y: cr.y, r0: 2, r1: 46, life: 0.7, t: 0, col: '#7ff3ff', thick: 2 });
+      this.addFx({ type: 'sparks', x: cr.x, y: cr.y, life: 0.8, t: 0, n: 18, col: '#b6f7ff' });
       this.companions.addXp(35);
       const n = this.crystalCount();
       if (n === this.CRYSTALS_NEEDED) SV.UI.banner('ÅTTA KRISTALLER', 'Urkärnan kan väckas');
@@ -325,8 +354,7 @@
       p.coolant = p.maxCoolant;
       p.invuln = 1.5;
       p.knock.x = p.knock.y = 0;
-      this.cam.x = p.x;
-      this.cam.y = p.y;
+      if (SV.View.snapCamera) SV.View.snapCamera();
       const c = this.companions.active;
       if (c) {
         c.action = null;
@@ -368,15 +396,15 @@
       const p = this.player, w = this.world;
       const near = (x, y, d) => SV.dist(p.x, p.y, x, y) < d;
       if (this.playerDown) return null;
-      if (near(w.forgePos.x, w.forgePos.y, 30)) return { label: 'Smedja', x: w.forgePos.x, y: w.forgePos.y - 30, action: () => SV.Forge.open(this) };
-      for (const a of w.animals) if (!a.met && near(a.x, a.y, 26)) return { label: 'Bli vän', x: a.x, y: a.y - 22, action: () => this.befriend(a) };
-      for (const k of w.chests) if (!k.open && near(k.x, k.y, 22)) return { label: 'Öppna', x: k.x, y: k.y - 18, action: () => this.openChest(k) };
-      for (const r of w.runestones) if (near(r.x, r.y, 24)) return { label: 'Läs', x: r.x, y: r.y - 26, action: () => this.readRune(r) };
-      if (near(w.core.x, w.core.y, 46)) return { label: this.won ? 'Urkärnan' : 'Väck kärnan', x: w.core.x, y: w.core.y - 70, action: () => this.activateCore() };
+      if (near(w.forgePos.x, w.forgePos.y, 30)) return { label: 'Smedja', x: w.forgePos.x, y: w.forgePos.y, action: () => SV.Forge.open(this) };
+      for (const a of w.animals) if (!a.met && near(a.x, a.y, 26)) return { label: 'Bli vän', x: a.x, y: a.y, action: () => this.befriend(a) };
+      for (const k of w.chests) if (!k.open && near(k.x, k.y, 22)) return { label: 'Öppna', x: k.x, y: k.y, action: () => this.openChest(k) };
+      for (const r of w.runestones) if (near(r.x, r.y, 24)) return { label: 'Läs', x: r.x, y: r.y, action: () => this.readRune(r) };
+      if (near(w.core.x, w.core.y, 46)) return { label: this.won ? 'Urkärnan' : 'Väck kärnan', x: w.core.x, y: w.core.y, action: () => this.activateCore() };
       for (const site of Object.values(w.bridgeSites)) {
         if (site.built) continue;
         const sx = (site.post[0] + 0.5) * T, sy = (site.post[1] + 0.5) * T;
-        if (near(sx, sy, 34)) return { label: 'Bygg bro', x: sx, y: sy - 16, action: () => this.tryBridge(site) };
+        if (near(sx, sy, 34)) return { label: 'Bygg bro', x: sx, y: sy, action: () => this.tryBridge(site) };
       }
       const tx = Math.floor(p.x / T), ty = Math.floor(p.y / T);
       for (let j = -1; j <= 1; j++)
@@ -385,13 +413,13 @@
           const cx = (tx + i + 0.5) * T, cy = (ty + j + 0.5) * T;
           if (bt === B.LOG && near(cx, cy, 22))
             return {
-              label: 'Stock', x: cx, y: cy - 14,
+              label: 'Stock', x: cx, y: cy,
               action: () => this.say(cx, cy, 'Tunga fallna stockar. <b>Älgen</b> på nivå 2 kan knuffa undan dem med sin Stockknuff, och Urkraftens Rusning plöjer rakt igenom.'),
             };
           if (bt === B.BARRICADE && near(cx, cy, 22))
             return {
-              label: 'Barrikad', x: cx, y: cy - 18,
-              action: () => this.say(cx, cy, `En el-barrikad (${w.blockHp[tx + i + ',' + (ty + j)] || 0} laddningar kvar). Håll in El-staven för en <b>EMP</b>, eller låt Älgens rusning eller Bäverns översvämning kortsluta den.`),
+              label: 'Barrikad', x: cx, y: cy,
+              action: () => this.say(cx, cy, `En el-barrikad (${w.blockHp[tx + i + ',' + (ty + j)] || 0} laddningar kvar). Håll in elhugget för en <b>EMP</b>, eller låt Älgens rusning eller Bäverns översvämning kortsluta den.`),
             };
         }
       return null;
@@ -408,14 +436,14 @@
       const info = SV.COMPANION_INFO[a.kind];
       SV.Sfx.play('level');
       SV.UI.banner('NY VÄN', info.name);
-      this.addFx({ type: 'ring', x: a.x, y: a.y - 6, r0: 2, r1: 28, life: 0.6, t: 0, col: '#8fcf6a', thick: 2 });
+      this.addFx({ type: 'ring', x: a.x, y: a.y, r0: 2, r1: 28, life: 0.6, t: 0, col: '#8fcf6a', thick: 2 });
       this.say(a.x, a.y, `<b>${info.name}</b> (${info.trait.toLowerCase()}) följer nu med dig. ${info.levels[0]} <br>Samarbete: <b>${info.coop[0].name}</b>. De andra djuren väntar vid lägerelden – byt genom att trycka på djurkortet.`);
     },
 
     openChest(k) {
       k.open = true;
       SV.Sfx.play('pickup');
-      this.spawnLoot(k.x, k.y - 4, { scrap: 6 + Math.floor(Math.random() * 6), chips: 1 + Math.floor(Math.random() * 2), berry: 1 });
+      this.spawnLoot(k.x, k.y, { scrap: 6 + Math.floor(Math.random() * 6), chips: 1 + Math.floor(Math.random() * 2), berry: 1 });
       this.companions.addXp(15);
       SV.UI.toast('Kistan innehöll skrot, kretsar och en bärkaka åt ditt djur.');
     },
@@ -520,7 +548,7 @@
       this.screenFlash = 1;
       this.env.storm_intensity = 0;
       this.robots.forEach((r) => r.active && r.apply_stun(6));
-      this.addFx({ type: 'ring', x: w.core.x, y: w.core.y - 40, r0: 10, r1: 260, life: 2, t: 0, col: '#b6f7ff', thick: 4 });
+      this.addFx({ type: 'ring', x: w.core.x, y: w.core.y, r0: 10, r1: 260, life: 2, t: 0, col: '#b6f7ff', thick: 4 });
       SV.UI.banner('URKÄRNAN', 'Skölden höjs');
       setTimeout(() => {
         const mins = Math.max(1, Math.round((Date.now() - this.stats.start) / 60000));
@@ -559,7 +587,7 @@
         this.floater(viaFox ? pk.x : p.x, (viaFox ? pk.y : p.y) - 20, '+' + pk.value + ' skrot', '#d4e2f2');
       } else if (pk.kind === 'chip') {
         p.chips += pk.value;
-        this.floater(p.x, p.y - 26, '+1 krets', '#8fef8a');
+        this.floater(p.x, p.y, '+1 krets', '#8fef8a');
       } else {
         this.companions.addXp(50);
         const c = this.companions.active;
@@ -614,8 +642,7 @@
           }
           for (const r of this.robots) {
             if (!r.active) continue;
-            const ry = r.y - r.h / 2 - (r.def.fly ? 12 : 0);
-            if (SV.dist(pr.x, pr.y, r.x, ry) < r.r + 4) {
+            if (SV.dist(pr.x, pr.y, r.x, r.y) < r.r + 4) {
               r.chill += p.frostChill();
               r.takeDamage(2 + p.stats.frost, 'frost', this, pr);
               if (r.active && r.chill >= 3 && r.frozen <= 0) {
@@ -633,11 +660,11 @@
           return true;
         }
         // drönarens elbolt
-        if (!this.playerDown && SV.dist(pr.x, pr.y, p.x, p.y - 6) < 7) {
+        if (!this.playerDown && SV.dist(pr.x, pr.y, p.x, p.y) < 7) {
           p.hurt(pr.dmg, this, { x: pr.x, y: pr.y });
           return false;
         }
-        if (this.decoy && SV.dist(pr.x, pr.y, this.decoy.x, this.decoy.y - 6) < 8) return false;
+        if (this.decoy && SV.dist(pr.x, pr.y, this.decoy.x, this.decoy.y) < 8) return false;
         return true;
       });
     },
@@ -732,7 +759,11 @@
     },
     rebuildMinimap() {
       const w = this.world;
-      if (!this.miniBase) this.miniBase = SV.Art.makeCanvas(w.W, w.H)[0];
+      if (!this.miniBase) {
+        this.miniBase = document.createElement('canvas');
+        this.miniBase.width = w.W;
+        this.miniBase.height = w.H;
+      }
       const g = this.miniBase.getContext('2d');
       const img = g.createImageData(w.W, w.H);
       for (let i = 0; i < w.W * w.H; i++) {
@@ -816,582 +847,13 @@
       this.hiddenBonus = !!s.hidden;
       if (this.won) w.core.lit = true;
     },
-
-    // ================================================================
-    // Rendering
-    // ================================================================
-    render() {
-      const ctx = this.ctx;
-      const W = this.canvas.width, H = this.canvas.height, Z = this.zoom;
-      const vw = W / Z, vh = H / Z;
-      const p = this.player;
-      const tx = p.x, ty = p.y - 10;
-      this.cam.x += (tx - this.cam.x) * Math.min(1, this.dt * 7);
-      this.cam.y += (ty - this.cam.y) * Math.min(1, this.dt * 7);
-      const wpx = this.world.W * T, hpx = this.world.H * T;
-      let cx = SV.clamp(this.cam.x, vw / 2, wpx - vw / 2);
-      let cy = SV.clamp(this.cam.y, vh / 2, hpx - vh / 2);
-      if (this.shakeAmt > 0) {
-        cx += (Math.random() - 0.5) * this.shakeAmt;
-        cy += (Math.random() - 0.5) * this.shakeAmt;
-      }
-      const view = (this.view = { x: cx - vw / 2, y: cy - vh / 2, w: vw, h: vh });
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = '#0a130f';
-      ctx.fillRect(0, 0, W, H);
-      const ox = Math.round(view.x * Z), oy = Math.round(view.y * Z);
-      ctx.setTransform(Z, 0, 0, Z, -ox, -oy);
-      this.snap = (v) => Math.round(v * Z) / Z;
-
-      this.drawGround(ctx, view);
-      this.drawWorldObjects(ctx, view);
-      this.drawFx(ctx);
-
-      // krigsdimma (mjuk tack vare bilinjär uppskalning)
-      ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(this.world.fogCanvas, 0, 0, this.world.W * T, this.world.H * T);
-      ctx.imageSmoothingEnabled = false;
-
-      this.env.render(ctx, view);
-
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      this.env.renderGrade(ctx, W, H);
-      if (this.screenFlash > 0) {
-        ctx.fillStyle = `rgba(255,250,225,${this.screenFlash * 0.8})`;
-        ctx.fillRect(0, 0, W, H);
-      }
-      if (p.energy <= 2 && !this.paused) {
-        const a = 0.18 + Math.sin(this.time * 5) * 0.08;
-        const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.7);
-        vg.addColorStop(0, 'rgba(255,60,60,0)');
-        vg.addColorStop(1, `rgba(255,60,60,${a})`);
-        ctx.fillStyle = vg;
-        ctx.fillRect(0, 0, W, H);
-      }
-      if (this.playerDown) {
-        ctx.fillStyle = `rgba(10,19,15,${1 - this.downT / 1.6})`;
-        ctx.fillRect(0, 0, W, H);
-      }
-      this.drawScreenText(ctx, view);
-    },
-
-    drawGround(ctx, view) {
-      const S = 16 * T;
-      const w = this.world;
-      const x0 = Math.floor(view.x / S), y0 = Math.floor(view.y / S);
-      const x1 = Math.floor((view.x + view.w) / S), y1 = Math.floor((view.y + view.h) / S);
-      for (let cy = y0; cy <= y1; cy++)
-        for (let cx = x0; cx <= x1; cx++) {
-          if (cx < 0 || cy < 0 || cx * 16 >= w.W || cy * 16 >= w.H) continue;
-          ctx.drawImage(w.getChunk(cx, cy), cx * S, cy * S);
-        }
-      // förbered en grannchunk per bildruta så att det inte hackar senare
-      if (!this.prewarm) this.prewarm = { i: 0 };
-      const total = Math.ceil(w.W / 16) * Math.ceil(w.H / 16);
-      for (let k = 0; k < total && this.prewarm.i < total; k++) {
-        const i = this.prewarm.i;
-        const cx = i % Math.ceil(w.W / 16), cy = Math.floor(i / Math.ceil(w.W / 16));
-        if (!w.chunks[cx + ',' + cy]) {
-          w.getChunk(cx, cy);
-          break;
-        }
-        this.prewarm.i++;
-      }
-
-      // vattenglitter och detaljer per ruta
-      const tx0 = Math.max(0, Math.floor(view.x / T)), ty0 = Math.max(0, Math.floor(view.y / T));
-      const tx1 = Math.min(w.W - 1, Math.floor((view.x + view.w) / T)), ty1 = Math.min(w.H - 1, Math.floor((view.y + view.h) / T));
-      const lynx = this.companions.hiddenPathsOpen();
-      const tick = Math.floor(this.time * 2);
-      for (let y = ty0; y <= ty1; y++)
-        for (let x = tx0; x <= tx1; x++) {
-          const gt = w.ground[y * w.W + x];
-          if (gt === G.DEEP || gt === G.SHALLOW || gt === G.SITE) {
-            const h = SV.hash(x, y, tick);
-            if (h < 0.35) {
-              ctx.fillStyle = gt === G.DEEP ? 'rgba(170,215,240,0.7)' : 'rgba(220,245,255,0.8)';
-              ctx.fillRect(x * T + Math.floor(SV.hash(x, y, tick + 1) * 13), y * T + Math.floor(SV.hash(x, y, tick + 2) * 14), 2, 1);
-            }
-          } else if (gt === G.HIDDEN && lynx) {
-            const a = 0.25 + Math.sin(this.time * 3 + x) * 0.12;
-            ctx.fillStyle = `rgba(214,255,176,${a})`;
-            for (let i = 0; i < 4; i++) ctx.fillRect(x * T + 2 + i * 4, y * T + 7 + ((i % 2) * 2 - 1), 2, 2);
-          }
-        }
-      // hundens markeringar och uppgrävda hål
-      w.buried.forEach((b) => {
-        if (b.x < view.x - 10 || b.x > view.x + view.w + 10 || b.y < view.y - 10 || b.y > view.y + view.h + 10) return;
-        if (b.dug) {
-          ctx.fillStyle = 'rgba(60,36,20,0.6)';
-          ctx.fillRect(b.x - 3, b.y - 1, 6, 3);
-        } else if (b.marked > 0) ctx.drawImage(SV.SPR.obj.moundSparkle, Math.round(b.x - 5), Math.round(b.y - 4));
-      });
-    },
-
-    drawWorldObjects(ctx, view) {
-      const w = this.world, O = SV.SPR.obj, p = this.player;
-      const list = [];
-      const pad = 3;
-      const tx0 = Math.max(0, Math.floor(view.x / T) - pad), ty0 = Math.max(0, Math.floor(view.y / T) - 1);
-      const tx1 = Math.min(w.W - 1, Math.floor((view.x + view.w) / T) + pad), ty1 = Math.min(w.H - 1, Math.floor((view.y + view.h) / T) + pad + 2);
-      const frame3 = Math.floor(this.time * 8) % 3;
-      for (let y = ty0; y <= ty1; y++)
-        for (let x = tx0; x <= tx1; x++) {
-          const bt = w.block[y * w.W + x];
-          if (bt === B.NONE || bt === B.PART) continue;
-          const v = w.variant[y * w.W + x];
-          let spr = null, shadow = 6, dx = 0, tree = false;
-          switch (bt) {
-            case B.PINE: spr = O.pine[v % 4]; dx = (v % 5) - 2; tree = true; break;
-            case B.PINE_SNOW: spr = O.pineSnow[v % 3]; dx = (v % 5) - 2; tree = true; break;
-            case B.SPRUCE: spr = O.spruce[v % 2]; dx = (v % 3) - 1; shadow = 8; tree = true; break;
-            case B.SPRUCE_DARK: spr = O.spruceDark[v % 2]; dx = (v % 3) - 1; shadow = 8; tree = true; break;
-            case B.BIRCH: spr = O.birch[v % 3]; dx = (v % 5) - 2; tree = true; break;
-            case B.ROCK: spr = O.rock[v % 2]; break;
-            case B.ROCK_MOSS: spr = O.rockMoss[v % 2]; break;
-            case B.RUIN: spr = O.ruin[v % 3]; shadow = 0; break;
-            case B.LOG: spr = O.log; break;
-            case B.BARRICADE: spr = O.barricade[frame3]; shadow = 0; break;
-            case B.SCRAPHEAP: spr = O.scrapHeap[v % 2]; break;
-            case B.RUNESTONE: {
-              const r = w.runestones.find((q) => q.tx === x && q.ty === y);
-              spr = r && r.read ? O.runestoneLit : O.runestone;
-              break;
-            }
-            case B.PYLON: {
-              const core = w.core.pylons.some(([px, py]) => px === x && py === y);
-              spr = (core && (this.won || w.core.lit)) || (!core && Math.sin(this.time * 2 + x * 3) > 0.97) ? O.pylonLit : O.pylon;
-              break;
-            }
-            case B.CAMPFIRE: spr = O.campfire[frame3]; shadow = 0; break;
-          }
-          if (!spr) continue;
-          const bx = (x + 0.5) * T + dx, by = (y + 1) * T;
-          list.push({ y: by - (bt === B.LOG ? 4 : 0), spr, x: bx, by, shadow, tree, kind: bt });
-        }
-      w.big.forEach((o) => {
-        const bx = (o.x + o.w / 2) * T, by = (o.y + o.h) * T;
-        if (bx < view.x - 60 || bx > view.x + view.w + 60 || by < view.y - 10 || by > view.y + view.h + 100) return;
-        let spr;
-        if (o.kind === 'forge') spr = O.forge;
-        else if (o.kind === 'tent') spr = O.tent;
-        else if (o.kind === 'reactor') spr = O.reactor;
-        else spr = this.won ? O.urkarnanLit : O.urkarnan;
-        list.push({ y: by, spr, x: bx, by: by + (o.kind === 'core' ? 4 : 2), shadow: o.kind === 'core' ? 0 : 0 });
-      });
-      // brostolpar
-      Object.values(w.bridgeSites).forEach((s) => {
-        if (s.built) return;
-        list.push({ y: (s.post[1] + 1) * T, spr: O.bridgePosts, x: (s.post[0] + 0.5) * T, by: (s.post[1] + 1) * T - 2, shadow: 0 });
-      });
-      // dynamiska saker
-      w.crystals.forEach((c) => {
-        if (c.taken || c.buried) return;
-        list.push({ y: c.y, draw: () => this.drawCrystal(ctx, c) });
-      });
-      w.chests.forEach((k) => list.push({ y: k.y, spr: k.open ? O.chestOpen : O.chest, x: k.x, by: k.y + 2, shadow: 5 }));
-      w.animals.forEach((a) => !a.met && list.push({ y: a.y, draw: () => this.drawWaitingAnimal(ctx, a) }));
-      this.companions.unlocked.forEach((k) => {
-        const c = this.companions.roster[k];
-        list.push({ y: c.y, draw: () => this.drawCompanion(ctx, c, k === this.companions.activeKind) });
-      });
-      if (!this.playerDown) list.push({ y: p.y, draw: () => this.drawPlayer(ctx) });
-      this.robots.forEach((r) => {
-        if (r.x < view.x - 40 || r.x > view.x + view.w + 40 || r.y < view.y - 40 || r.y > view.y + view.h + 60) return;
-        list.push({ y: r.y + (r.def.fly ? 14 : 0), draw: () => this.drawRobot(ctx, r) });
-      });
-      this.pickups.forEach((k) => list.push({ y: k.y, draw: () => this.drawPickup(ctx, k) }));
-      if (this.decoy) list.push({ y: this.decoy.y, draw: () => this.drawDecoy(ctx) });
-
-      // skuggor först
-      ctx.fillStyle = 'rgba(10,20,14,0.28)';
-      list.forEach((o) => {
-        if (!o.spr || !o.shadow) return;
-        ctx.beginPath();
-        ctx.ellipse(o.x, o.by - 1, o.shadow, o.shadow * 0.4, 0, 0, Math.PI * 2);
-        ctx.fill();
-      });
-      // drönarnas sökarljus på marken
-      this.robots.forEach((r) => {
-        if (r.type !== 'drone' || !r.active || r.blind > 0 || r.stun > 0 || r.frozen > 0) return;
-        const R = r.detectRadius(this) * 1.15;
-        ctx.fillStyle = r.state === 'patrol' ? 'rgba(255,240,170,0.13)' : 'rgba(255,120,100,0.15)';
-        ctx.beginPath();
-        ctx.moveTo(r.x, r.y);
-        ctx.arc(r.x, r.y, R, r.searchA - 0.5, r.searchA + 0.5);
-        ctx.closePath();
-        ctx.fill();
-      });
-
-      list.sort((a, b) => a.y - b.y);
-      const snap = this.snap;
-      list.forEach((o) => {
-        if (o.draw) return o.draw();
-        let alpha = 1;
-        if (o.tree && p.y < o.by - 2 && p.y > o.by - o.spr.height + 4 && Math.abs(p.x - o.x) < o.spr.width / 2) alpha = 0.55;
-        if (alpha < 1) ctx.globalAlpha = alpha;
-        ctx.drawImage(o.spr, snap(o.x - o.spr.width / 2), snap(o.by - o.spr.height));
-        if (alpha < 1) ctx.globalAlpha = 1;
-        if (o.kind === B.CAMPFIRE) {
-          const gl = ctx.createRadialGradient(o.x, o.by - 6, 0, o.x, o.by - 6, 34);
-          gl.addColorStop(0, 'rgba(255,170,80,0.28)');
-          gl.addColorStop(1, 'rgba(255,170,80,0)');
-          ctx.fillStyle = gl;
-          ctx.fillRect(o.x - 34, o.by - 40, 68, 68);
-        }
-      });
-    },
-
-    shadow(ctx, x, y, r) {
-      ctx.fillStyle = 'rgba(10,20,14,0.3)';
-      ctx.beginPath();
-      ctx.ellipse(x, y, r, r * 0.38, 0, 0, Math.PI * 2);
-      ctx.fill();
-    },
-
-    drawPlayer(ctx) {
-      const p = this.player, snap = this.snap;
-      if (!p.frames) p.setArmor(p.armor);
-      this.shadow(ctx, p.x, p.y, 6);
-      const blink = p.invuln > 0 && Math.floor(this.time * 14) % 2 === 0;
-      const frameIdx = p.moving ? 1 + (Math.floor(p.animT * 4) % 2) : 0;
-      const spr = p.frames[p.dir][frameIdx];
-      const bob = p.moving && frameIdx === 1 ? -1 : 0;
-      const sx = snap(p.x - spr.width / 2), sy = snap(p.y - spr.height + 2 + bob);
-      const staffBehind = p.dir === 'up';
-      if (staffBehind) this.drawStaff(ctx, p);
-      if (!blink) ctx.drawImage(spr, sx, sy);
-      if (!staffBehind) this.drawStaff(ctx, p);
-      if (p.shield > 0) {
-        ctx.strokeStyle = `rgba(255,210,94,${0.5 + Math.sin(this.time * 6) * 0.2})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.ellipse(p.x, p.y - 9, 12, 14, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      // laddning av EMP
-      const In = SV.Input;
-      if (In.down('staff') && In.holdTime('staff') > 0.3 && p.empCd <= 0) {
-        const k = Math.min(1, (In.holdTime('staff') - 0.3) / 0.3);
-        ctx.strokeStyle = k >= 1 ? '#ffffff' : 'rgba(127,243,255,0.8)';
-        ctx.lineWidth = k >= 1 ? 1.5 : 1;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y - 6, 6 + k * 14 + (k >= 1 ? Math.sin(this.time * 20) : 0), 0, Math.PI * 2);
-        ctx.stroke();
-      }
-    },
-
-    drawStaff(ctx, p) {
-      const a = p.face + (p.swing > 0 ? (p.swing / 0.18 - 0.5) * 1.6 : 0);
-      const hx = p.x + (p.dir === 'left' ? -4 : p.dir === 'right' ? 4 : 5), hy = p.y - 6;
-      const len = 11;
-      const ex = hx + Math.cos(a) * len, ey = hy + Math.sin(a) * len * 0.8 - 2;
-      ctx.strokeStyle = '#3a3048';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(hx, hy);
-      ctx.lineTo(ex, ey);
-      ctx.stroke();
-      ctx.strokeStyle = '#c9d2de';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(hx, hy);
-      ctx.lineTo(ex, ey);
-      ctx.stroke();
-      const glow = p.swing > 0 || (SV.Input.down('staff') && p.empCd <= 0);
-      ctx.fillStyle = glow ? '#ffffff' : '#7ff3ff';
-      ctx.fillRect(Math.round(ex) - 1, Math.round(ey) - 1, 3, 3);
-      if (glow) {
-        ctx.fillStyle = 'rgba(127,243,255,0.35)';
-        ctx.fillRect(Math.round(ex) - 3, Math.round(ey) - 3, 7, 7);
-      }
-    },
-
-    drawCompanion(ctx, c, active) {
-      const snap = this.snap;
-      const anim = SV.SPR.animals[c.kind];
-      let spr;
-      if (c.kind === 'owl') spr = active || c.z > 4 ? anim[c.dirX > 0 ? 'right' : 'left'][Math.floor(c.animT * 6) % 2] : anim.perched;
-      else spr = anim[c.dirX > 0 ? 'right' : 'left'][c.moving ? Math.floor(c.animT * 7) % 2 : 0];
-      const s = c.scale;
-      const w = spr.width * s, h = spr.height * s;
-      this.shadow(ctx, c.x, c.y, (w / 2.6) * (c.z > 0 ? 0.7 : 1));
-      if (c.current_level >= 2) {
-        const t = this.time;
-        const col = c.current_level === 3 ? '255,210,94' : '143,207,106';
-        ctx.strokeStyle = `rgba(${col},${0.35 + Math.sin(t * 3) * 0.15})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.ellipse(c.x, c.y, w / 2 + 3, (w / 2 + 3) * 0.38, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        if (c.current_level === 3 && Math.floor(t * 8 + c.x) % 5 === 0) {
-          ctx.fillStyle = '#ffe28a';
-          ctx.fillRect(Math.round(c.x + Math.sin(t * 5) * w * 0.5), Math.round(c.y - c.z - h * (0.3 + ((t * 0.7) % 0.7))), 1, 1);
-        }
-      }
-      ctx.drawImage(spr, snap(c.x - w / 2), snap(c.y - h + 1 - c.z), w, h);
-      if (c.bubble) this.bubble(ctx, c.x, c.y - h - c.z - 4, c.bubble.text);
-    },
-
-    drawWaitingAnimal(ctx, a) {
-      const anim = SV.SPR.animals[a.kind];
-      const spr = a.kind === 'owl' ? anim.perched : anim.left[0];
-      this.shadow(ctx, a.x, a.y, spr.width / 2.6);
-      ctx.drawImage(spr, this.snap(a.x - spr.width / 2), this.snap(a.y - spr.height + 1));
-      const bob = Math.sin(this.time * 3) * 1.5;
-      ctx.fillStyle = '#ffcf5a';
-      ctx.font = '700 9px "Pixelify Sans", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('?', a.x, a.y - spr.height - 3 + bob);
-    },
-
-    drawRobot(ctx, r) {
-      const snap = this.snap;
-      const set = r.spriteSet();
-      let frame = 0;
-      if (r.type === 'drone') frame = Math.floor(r.animT * 12) % 2;
-      else if (r.type === 'bear') frame = r.state !== 'patrol' || r.wander ? (r.stun > 0 || r.frozen > 0 || !r.active ? 0 : 1 + (Math.floor(r.animT * 4) % 2)) : 0;
-      else frame = r.stun > 0 || r.frozen > 0 || !r.active ? 0 : Math.floor(r.animT * 8) % 2;
-      const spr = set[Math.min(frame, set.length - 1)];
-      const hover = r.def.fly ? 12 + Math.sin(r.animT * 3) * 2 : 0;
-      const fall = r.active ? 0 : Math.min(1, r.fade * 3);
-      this.shadow(ctx, r.x, r.y, r.r * (r.def.fly ? 0.7 : 1));
-      if (!r.active) ctx.globalAlpha = Math.max(0, 1 - Math.max(0, r.fade - 2.5) / 1.5);
-      const wind = r.state === 'windup' ? Math.sin(this.time * 40) * 1 : 0;
-      const hY = r.def.fly ? hover * (1 - fall) : 0;
-      ctx.drawImage(spr, snap(r.x - spr.width / 2 + wind), snap(r.y - spr.height + 1 - hY));
-      ctx.globalAlpha = 1;
-      if (!r.active) {
-        if (Math.random() < 0.05) this.addFx({ type: 'puff', x: r.x, y: r.y - 6, life: 0.6, t: 0 });
-        return;
-      }
-      const top = r.y - spr.height - hY;
-      if (r.state === 'windup') {
-        ctx.fillStyle = r.type === 'bear' ? 'rgba(255,207,90,0.35)' : 'rgba(255,90,70,0.3)';
-        ctx.beginPath();
-        ctx.arc(r.x + Math.cos(r.atkA) * 12, r.y + Math.sin(r.atkA) * 12, r.type === 'bear' ? 20 : 8, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      // statusikoner
-      ctx.textAlign = 'center';
-      ctx.font = '700 9px "Pixelify Sans", sans-serif';
-      if (r.state === 'alert') {
-        ctx.fillStyle = '#ff5a4a';
-        ctx.fillText('!', r.x, top - 2);
-      } else if (r.distract || (this.decoy && r.state === 'chase' && r.targetPos(this) === this.decoy)) {
-        ctx.fillStyle = '#ffcf5a';
-        ctx.fillText('?', r.x, top - 2);
-      }
-      if (r.stun > 0) {
-        for (let i = 0; i < 3; i++) {
-          const a = this.time * 5 + (i * Math.PI * 2) / 3;
-          ctx.fillStyle = i % 2 ? '#7ff3ff' : '#ffe28a';
-          ctx.fillRect(Math.round(r.x + Math.cos(a) * 7), Math.round(top + 2 + Math.sin(a) * 2), 1, 1);
-        }
-      }
-      if (r.frozen > 0) {
-        ctx.fillStyle = 'rgba(220,250,255,0.85)';
-        ctx.fillRect(Math.round(r.x - spr.width / 2), Math.round(r.y - 2), spr.width, 2);
-      }
-      if (r.wet > 0 && Math.floor(this.time * 4) % 2 === 0) {
-        ctx.fillStyle = '#7ab8ff';
-        ctx.fillRect(Math.round(r.x + 4), Math.round(top + 6), 1, 2);
-      }
-      if (r.hp < r.maxHp) {
-        const bw = Math.max(10, r.r * 2);
-        ctx.fillStyle = '#0a130f';
-        ctx.fillRect(Math.round(r.x - bw / 2) - 1, Math.round(top - 6) - 1, bw + 2, 3);
-        ctx.fillStyle = r.frozen > 0 ? '#9fe6ff' : '#ff8a5a';
-        ctx.fillRect(Math.round(r.x - bw / 2), Math.round(top - 6), Math.max(0, Math.round((bw * r.hp) / r.maxHp)), 1);
-      }
-    },
-
-    drawCrystal(ctx, c) {
-      const spr = SV.SPR.obj.crystal;
-      const bob = Math.sin(this.time * 2.4 + c.x) * 1.5;
-      const pulse = 0.35 + Math.sin(this.time * 3 + c.y) * 0.12;
-      const gl = ctx.createRadialGradient(c.x, c.y - 8, 0, c.x, c.y - 8, 26);
-      gl.addColorStop(0, `rgba(127,243,255,${pulse})`);
-      gl.addColorStop(1, 'rgba(127,243,255,0)');
-      ctx.fillStyle = gl;
-      ctx.fillRect(c.x - 26, c.y - 34, 52, 52);
-      this.shadow(ctx, c.x, c.y, 4);
-      ctx.drawImage(spr, this.snap(c.x - spr.width / 2), this.snap(c.y - spr.height - 2 + bob));
-      if (c.ping > 0) {
-        ctx.strokeStyle = `rgba(255,230,168,${Math.min(1, c.ping / 2)})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(c.x, c.y - 8, 10 + ((this.time * 20) % 16), 0, Math.PI * 2);
-        ctx.stroke();
-      }
-    },
-
-    drawPickup(ctx, k) {
-      const spr = SV.SPR.pickup[k.kind];
-      this.shadow(ctx, k.x, k.y, 3);
-      const bob = k.z > 0 ? 0 : Math.sin(this.time * 4 + k.x) * 0.8;
-      ctx.drawImage(spr, this.snap(k.x - spr.width / 2), this.snap(k.y - spr.height - k.z + bob));
-    },
-
-    drawDecoy(ctx) {
-      const d = this.decoy;
-      const spr = this.player.frames.down[0];
-      ctx.globalAlpha = 0.45 + Math.sin(this.time * 12) * 0.15;
-      ctx.drawImage(SV.Art.tint ? spr : spr, this.snap(d.x - spr.width / 2), this.snap(d.y - spr.height + 2));
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = 'rgba(255,154,74,0.7)';
-      ctx.beginPath();
-      ctx.ellipse(d.x, d.y, 9, 3.5, 0, 0, Math.PI * 2);
-      ctx.stroke();
-    },
-
-    drawFx(ctx) {
-      this.projectiles.forEach((pr) => {
-        if (pr.kind === 'frost') {
-          ctx.fillStyle = '#e4fdff';
-          ctx.fillRect(Math.round(pr.x) - 1, Math.round(pr.y) - 1, 3, 3);
-          ctx.fillStyle = 'rgba(127,243,255,0.45)';
-          ctx.fillRect(Math.round(pr.x) - 2, Math.round(pr.y) - 2, 5, 5);
-        } else {
-          ctx.fillStyle = Math.floor(this.time * 20) % 2 ? '#ffffff' : '#ff6a8a';
-          ctx.fillRect(Math.round(pr.x) - 1, Math.round(pr.y) - 1, 3, 3);
-          ctx.fillStyle = 'rgba(255,106,138,0.35)';
-          ctx.fillRect(Math.round(pr.x) - 3, Math.round(pr.y) - 3, 7, 7);
-        }
-      });
-      this.fx.forEach((f) => {
-        const k = f.t / f.life;
-        switch (f.type) {
-          case 'ring': {
-            const r = SV.lerp(f.r0, f.r1, 1 - Math.pow(1 - k, 2));
-            ctx.strokeStyle = f.col;
-            ctx.globalAlpha = 1 - k;
-            ctx.lineWidth = f.thick || 1.5;
-            ctx.beginPath();
-            ctx.ellipse(f.x, f.y, r, r * 0.6, 0, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.globalAlpha = 1;
-            break;
-          }
-          case 'arc': {
-            ctx.strokeStyle = '#e4fdff';
-            ctx.lineWidth = 1.2;
-            ctx.globalAlpha = 1 - k;
-            ctx.beginPath();
-            ctx.arc(f.x, f.y, 18, f.a - 0.9, f.a + 0.9);
-            ctx.stroke();
-            ctx.strokeStyle = '#7ff3ff';
-            ctx.beginPath();
-            let px = f.x, py = f.y;
-            ctx.moveTo(px, py);
-            for (let i = 1; i <= 4; i++) {
-              const d = i * 6;
-              px = f.x + Math.cos(f.a) * d + (Math.random() - 0.5) * 6;
-              py = f.y + Math.sin(f.a) * d + (Math.random() - 0.5) * 6;
-              ctx.lineTo(px, py);
-            }
-            ctx.stroke();
-            ctx.globalAlpha = 1;
-            break;
-          }
-          case 'sparks':
-            ctx.fillStyle = f.col || (Math.random() < 0.5 ? '#fff27a' : '#7ff3ff');
-            f.parts.forEach((q) => ctx.fillRect(Math.round(q.x), Math.round(q.y), 1, 1));
-            break;
-          case 'dirt':
-            ctx.fillStyle = '#7a5a3a';
-            f.parts.forEach((q) => ctx.fillRect(Math.round(q.x), Math.round(q.y), 1, 1));
-            break;
-          case 'puff':
-            ctx.fillStyle = `rgba(200,205,215,${0.7 * (1 - k)})`;
-            f.parts.forEach((q) => ctx.fillRect(Math.round(q.x) - 1, Math.round(q.y) - 1, 2, 2));
-            break;
-          case 'frost':
-            ctx.fillStyle = `rgba(200,245,255,${1 - k})`;
-            ctx.fillRect(Math.round(f.x), Math.round(f.y), 1, 1);
-            break;
-          case 'frostburst':
-            ctx.strokeStyle = `rgba(200,245,255,${1 - k})`;
-            ctx.lineWidth = 1;
-            for (let i = 0; i < 6; i++) {
-              const a = (i / 6) * Math.PI * 2;
-              ctx.beginPath();
-              ctx.moveTo(f.x, f.y);
-              ctx.lineTo(f.x + Math.cos(a) * 6 * k + Math.cos(a), f.y + Math.sin(a) * 6 * k);
-              ctx.stroke();
-            }
-            break;
-          case 'splash': {
-            const r = f.r * Math.min(1, k * 1.6);
-            ctx.fillStyle = `rgba(90,170,230,${0.35 * (1 - k)})`;
-            ctx.beginPath();
-            ctx.ellipse(f.x, f.y, r, r * 0.6, 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = `rgba(220,245,255,${0.8 * (1 - k)})`;
-            ctx.lineWidth = f.big ? 3 : 1.5;
-            ctx.stroke();
-            break;
-          }
-        }
-      });
-    },
-
-    bubble(ctx, x, y, text) {
-      this.bubbles = this.bubbles || [];
-      this.bubbles.push({ x, y, text });
-    },
-
-    drawScreenText(ctx, view) {
-      const Z = this.zoom;
-      const toS = (x, y) => [(x - view.x) * Z, (y - view.y) * Z];
-      const fs = Math.max(11, Math.round(Z * 3.2));
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'alphabetic';
-      ctx.font = `${fs}px "Silkscreen", monospace`;
-      this.floaters.forEach((f) => {
-        const [sx, sy] = toS(f.x, f.y);
-        ctx.globalAlpha = 1 - Math.max(0, f.t - 0.6) / 0.4;
-        ctx.fillStyle = '#0a130f';
-        ctx.fillText(f.text, sx + 2, sy + 2);
-        ctx.fillStyle = f.col;
-        ctx.fillText(f.text, sx, sy);
-      });
-      ctx.globalAlpha = 1;
-      // pratbubblor
-      ctx.font = `${fs}px "Pixelify Sans", sans-serif`;
-      (this.bubbles || []).forEach((b) => {
-        const [sx, sy] = toS(b.x, b.y);
-        const w = ctx.measureText(b.text).width + fs;
-        ctx.fillStyle = 'rgba(241,236,224,0.95)';
-        ctx.fillRect(sx - w / 2, sy - fs * 1.4, w, fs * 1.5);
-        ctx.fillStyle = '#0f1c17';
-        ctx.fillText(b.text, sx, sy - fs * 0.3);
-      });
-      this.bubbles = [];
-      // markering ovanför det man kan interagera med
-      const it = this.interactTarget;
-      if (it && !this.paused) {
-        const [sx, sy] = toS(it.x, it.y + Math.sin(this.time * 5) * 1.5);
-        const s = Z * 1.5;
-        ctx.fillStyle = '#ffcf5a';
-        ctx.beginPath();
-        ctx.moveTo(sx - s * 2, sy - s * 2);
-        ctx.lineTo(sx + s * 2, sy - s * 2);
-        ctx.lineTo(sx, sy);
-        ctx.closePath();
-        ctx.fill();
-      }
-    },
   };
 
   SV.Game = Game;
 
-  // Start – stöd för att behålla spelläget när sidan uppdateras i en viewer.
-  function boot(data) {
-    Game.init(data || {});
-  }
-  window.addEventListener('DOMContentLoaded', () => {
+  // Startas av js3d/main.js när 3D-motorn har laddats. Behåller spelläget
+  // om sidan uppdateras i en viewer som stöder det.
+  SV.bootGame = function () {
     const hot = window.claude && window.claude.hot;
     if (hot && hot.snapshot) {
       try {
@@ -1400,7 +862,8 @@
         /* ingen hot-reload */
       }
     }
+    const boot = (data) => Game.init(data || {});
     if (hot && hot.ready) hot.ready(boot);
     else boot((hot && hot.data) || {});
-  });
+  };
 })();

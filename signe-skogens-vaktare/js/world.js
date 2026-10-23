@@ -1,14 +1,15 @@
 // world.js – kartgenerering (Mossdalen, Järnforsen, Dimkronorna, Urkärnan),
-// terräng, kollision, markmålning per pixel och krigsdimma.
+// kristallgrottor, terräng, kollision och utforskning. Ingen grafik här:
+// 3D-vyn läser ground/block-rutnätet och lyssnar på onChange.
 (function () {
   'use strict';
   const SV = window.SV;
   const T = SV.TILE;
 
-  const G = { GRASS: 0, MOSS: 1, DARK: 2, SNOW: 3, DIRT: 4, MUD: 5, SHALLOW: 6, DEEP: 7, BRIDGE: 8, FLOOR: 9, SITE: 10, THICKET: 11, HIDDEN: 12 };
+  const G = { GRASS: 0, MOSS: 1, DARK: 2, SNOW: 3, DIRT: 4, MUD: 5, SHALLOW: 6, DEEP: 7, BRIDGE: 8, FLOOR: 9, SITE: 10, THICKET: 11, HIDDEN: 12, CAVE: 13 };
   const B = {
     NONE: 0, PINE: 1, PINE_SNOW: 2, SPRUCE: 3, BIRCH: 4, ROCK: 5, ROCK_MOSS: 6, RUIN: 7, LOG: 8, BARRICADE: 9,
-    SCRAPHEAP: 10, RUNESTONE: 11, PYLON: 12, PART: 13, CAMPFIRE: 14, SPRUCE_DARK: 15,
+    SCRAPHEAP: 10, RUNESTONE: 11, PYLON: 12, PART: 13, CAMPFIRE: 14, SPRUCE_DARK: 15, CAVEWALL: 16,
   };
   const D = { NONE: 0, FLOWER_W: 1, FLOWER_Y: 2, FLOWER_B: 3, MUSHROOM: 4, TUFT: 5, PEBBLE: 6, BERRY: 7, BOLT: 8, LICHEN: 9, CABLE: 10 };
 
@@ -40,7 +41,8 @@
       this.buried = [];
       this.spawns = [];
       this.bridgeSites = {};
-      this.chunks = {};
+      this.grottos = [];
+      this.onChange = null;
       this.changes = [];
       this.generate();
     }
@@ -256,6 +258,9 @@
       for (let i = 0; i < 6; i++) this.placeIfFree(rnd.int(5, 90), rnd.int(6, 40), B.RUIN);
       for (let i = 0; i < 5; i++) this.placeIfFree(rnd.int(8, 88), rnd.int(90, 122), B.SCRAPHEAP);
 
+      // Kristallgrottor: rundade klippväggar med en smal öppning mot stigen.
+      [[53, 99, 3.2], [80, 106, 3.4], [62, 74, 3.0], [20, 30, 3.6], [64, 33, 3.0], [30, 12, 3.2]].forEach(([cx, cy, r]) => this.grotto(cx, cy, r));
+
       // Stigen ska alltid vara fri (efter allt annat).
       for (let i = 0; i < path.length - 1; i++) this.carve(path[i], path[i + 1], 1.3, true);
 
@@ -322,6 +327,46 @@
           if (p) this.spawns.push({ type, x: (p[0] + 0.5) * T, y: (p[1] + 0.5) * T });
         }
       });
+    }
+
+    grotto(cx, cy, r) {
+      // öppningen pekar mot närmaste punkt på stigen
+      let best = null, bd = Infinity;
+      this.path.forEach(([px, py]) => {
+        const d = Math.hypot(px - cx, py - cy);
+        if (d < bd) {
+          bd = d;
+          best = [px, py];
+        }
+      });
+      const open = Math.atan2(best[1] - cy, best[0] - cx);
+      this.disc(cx, cy, r + 1.6, (x, y, d) => {
+        const a = Math.atan2(y - cy, x - cx);
+        const inGap = Math.abs(SV.angleDiff(open, a)) < 0.42;
+        if (this.b(x, y) === B.PART) return;
+        if (d < r || (inGap && d < r + 1.7)) {
+          this.setB(x, y, B.NONE);
+          this.setG(x, y, G.CAVE);
+          this.deco[this.idx(x, y)] = 0;
+        } else if (this.g(x, y) !== G.DIRT && this.g(x, y) !== G.BRIDGE) this.setB(x, y, B.CAVEWALL);
+      });
+      // en kort gång ut till stigen
+      const ex = cx + Math.cos(open) * (r + 2.2), ey = cy + Math.sin(open) * (r + 2.2);
+      this.carveLine([cx + Math.cos(open) * r, cy + Math.sin(open) * r], [ex, ey], 0.9);
+      this.grottos.push({ x: cx, y: cy, r, open });
+    }
+    carveLine(a, b, r) {
+      const n = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) * 2) || 1;
+      for (let i = 0; i <= n; i++) {
+        this.disc(SV.lerp(a[0], b[0], i / n), SV.lerp(a[1], b[1], i / n), r, (x, y) => {
+          if (this.b(x, y) === B.PART) return;
+          this.setB(x, y, B.NONE);
+          if (!this.isWaterG(this.g(x, y)) && this.g(x, y) !== G.BRIDGE) this.setG(x, y, G.CAVE);
+        });
+      }
+    }
+    inGrotto(px, py) {
+      return this.groundAtPx(px, py) === G.CAVE;
     }
 
     water(x, y, type) {
@@ -427,7 +472,7 @@
       if (!site || site.built) return false;
       site.tiles.forEach(([x, y]) => {
         this.setG(x, y, G.BRIDGE);
-        this.invalidate(x, y);
+        this.invalidate(x, y, 'bridge');
       });
       site.built = true;
       this.changes.push({ t: 'bridge', id });
@@ -435,8 +480,9 @@
     }
     clearBlock(x, y) {
       if (this.b(x, y) === B.NONE) return;
+      const was = this.b(x, y);
       this.setB(x, y, B.NONE);
-      this.invalidate(x, y);
+      this.invalidate(x, y, 'block:' + was);
       this.changes.push({ t: 'clear', x, y });
     }
     applyChanges(list) {
@@ -445,168 +491,12 @@
         if (c.t === 'clear') this.clearBlock(c.x, c.y);
       });
     }
-    invalidate(x, y) {
-      const key = Math.floor(x / 16) + ',' + Math.floor(y / 16);
-      delete this.chunks[key];
+    invalidate(x, y, what) {
+      if (this.onChange) this.onChange(what || 'tile', x, y);
     }
 
-    // ---------------- markmålning ----------------
     isWaterG(gt) {
       return gt === G.DEEP || gt === G.SHALLOW || gt === G.SITE;
-    }
-    pixelColor(px, py) {
-      const tx = Math.floor(px / T), ty = Math.floor(py / T);
-      const exact = this.g(tx, ty);
-      const h = SV.hash(px, py, 17);
-      const h2 = SV.hash(px >> 1, py >> 1, 23);
-      const soft = (gt) => gt <= G.MUD;
-      let gt = exact;
-      if (soft(exact)) {
-        const jx = Math.round((SV.hash(px >> 1, py >> 1, 5) - 0.5) * 7);
-        const jy = Math.round((SV.hash(px >> 1, py >> 1, 6) - 0.5) * 7);
-        const alt = this.g(Math.floor((px + jx) / T), Math.floor((py + jy) / T));
-        if (soft(alt)) gt = alt;
-      }
-      const water = this.isWaterG(exact);
-      if (!water && exact !== G.BRIDGE) {
-        // sandkant mot vatten
-        for (const [ox, oy] of [[3, 0], [-3, 0], [0, 3], [0, -3]]) {
-          const ng = this.g(Math.floor((px + ox) / T), Math.floor((py + oy) / T));
-          if (this.isWaterG(ng)) return h < 0.3 ? '#c9b47c' : h < 0.5 ? '#bba26a' : '#d8c48e';
-        }
-      }
-      const lowN = SV.fbm(px * 0.035, py * 0.035, 3);
-      switch (gt) {
-        case G.GRASS:
-          if (h < 0.05) return '#74c45a';
-          if (h < 0.11) return '#3d8232';
-          return lowN > 0.55 ? '#58a845' : lowN > 0.42 ? '#51a03f' : '#4a9539';
-        case G.MOSS:
-          if (h < 0.06) return '#7dca6a';
-          if (h < 0.14) return '#2f6e3b';
-          return lowN > 0.5 ? '#46955a' : '#3d8a4f';
-        case G.DARK:
-          if (h < 0.04) return '#6e9a48';
-          if (h < 0.1) return '#30612c';
-          return lowN > 0.5 ? '#45803b' : '#3d7535';
-        case G.SNOW:
-          if (h < 0.04) return '#ffffff';
-          if (h < 0.15) return '#c9d6e4';
-          return lowN > 0.5 ? '#e4ecf4' : '#dae4ee';
-        case G.DIRT:
-          if (h < 0.05) return '#c4a072';
-          if (h < 0.15) return '#8b6740';
-          return h2 < 0.5 ? '#a37d4f' : '#9a7448';
-        case G.MUD:
-          if (h < 0.04) return '#8f7a68';
-          if (h < 0.2) return '#553a24';
-          return lowN > 0.5 ? '#6a4a2e' : '#62442a';
-        case G.FLOOR: {
-          const lx = ((px % 8) + 8) % 8, ly = ((py + (Math.floor(px / 8) % 2) * 4) % 8 + 8) % 8;
-          if (lx === 0 || ly === 0) return SV.hash(px, py, 8) < 0.3 ? '#5a9a4a' : '#6a6e76';
-          return h < 0.1 ? '#9aa0a8' : h2 < 0.5 ? '#868b93' : '#7d828a';
-        }
-        case G.THICKET:
-        case G.HIDDEN: {
-          const c = SV.hash(Math.floor(px / 3), Math.floor(py / 3), 41);
-          if (h < 0.015) return '#d8324a';
-          if (c < 0.2) return '#1e4a28';
-          if (c < 0.55) return '#2e6a34';
-          return h < 0.2 ? '#4f9a46' : '#3b7f3c';
-        }
-        case G.BRIDGE: {
-          const vertical = this.isWaterG(this.g(tx - 1, ty)) || this.g(tx - 1, ty) === G.BRIDGE;
-          const along = vertical ? py : px;
-          const across = vertical ? px % T : py % T;
-          const sideL = vertical ? this.g(tx - 1, ty) !== G.BRIDGE : this.g(tx, ty - 1) !== G.BRIDGE;
-          const sideR = vertical ? this.g(tx + 1, ty) !== G.BRIDGE : this.g(tx, ty + 1) !== G.BRIDGE;
-          if ((sideL && across < 2) || (sideR && across > 13)) return '#5a3a20';
-          if (along % 5 === 0) return '#6a4428';
-          return h < 0.15 ? '#b0804c' : '#9a6c3e';
-        }
-        default:
-          break;
-      }
-      // vatten
-      let shore = false;
-      for (const [ox, oy] of [[2, 0], [-2, 0], [0, 2], [0, -2]]) {
-        const ng = this.g(Math.floor((px + ox) / T), Math.floor((py + oy) / T));
-        if (!this.isWaterG(ng) && ng !== G.BRIDGE) shore = true;
-      }
-      if (shore) return '#b8e4f0';
-      if (exact === G.SHALLOW) {
-        if (h < 0.05) return '#8acfe0';
-        return lowN > 0.5 ? '#4fa8c8' : '#469cbe';
-      }
-      const streak = Math.sin(px * 0.25 + Math.sin(py * 0.15) * 2) > 0.92;
-      if (streak) return '#4a90c0';
-      return lowN > 0.5 ? '#2b6fa3' : '#255f8f';
-    }
-
-    paintDeco(p, ox, oy, tx, ty) {
-      const d = this.deco[this.idx(tx, ty)];
-      if (!d || this.block[this.idx(tx, ty)] !== B.NONE) return;
-      const gt = this.g(tx, ty);
-      if (gt === G.FLOOR || this.isWaterG(gt) || gt === G.BRIDGE || gt === G.THICKET || gt === G.HIDDEN) return;
-      const v = this.variant[this.idx(tx, ty)];
-      const x = ox + 3 + (v % 9), y = oy + 3 + ((v >> 4) % 9);
-      const set = (dx, dy, c) => p.set(x + dx, y + dy, c);
-      switch (d) {
-        case D.FLOWER_W:
-          set(0, 0, '#ffffff'); set(1, 0, '#ffffff'); set(0, 1, '#ffffff'); set(1, 1, '#ffe14a'); set(4, 2, '#ffffff'); set(4, 3, '#ffe14a');
-          break;
-        case D.FLOWER_Y:
-          set(0, 0, '#ffd23a'); set(1, 1, '#ffd23a'); set(0, 1, '#e8a020'); set(3, 3, '#ffd23a');
-          break;
-        case D.FLOWER_B:
-          set(0, 0, '#8a7aff'); set(1, 0, '#a89aff'); set(0, 1, '#6a5ae0'); set(1, 1, '#ffe14a');
-          break;
-        case D.MUSHROOM:
-          set(0, 0, '#e03a3a'); set(1, 0, '#e03a3a'); set(2, 0, '#e03a3a'); set(1, 0, '#ffffff'); set(1, 1, '#f0e6d2'); set(1, 2, '#f0e6d2');
-          break;
-        case D.TUFT:
-          set(0, 1, '#2f6e2b'); set(1, 0, '#6cbc52'); set(2, 1, '#2f6e2b'); set(1, 1, '#4f9a3e');
-          break;
-        case D.PEBBLE:
-          set(0, 0, '#a8adb6'); set(1, 0, '#c8ccd4'); set(0, 1, '#7d828c'); set(1, 1, '#8d929c');
-          break;
-        case D.BERRY:
-          set(0, 0, '#3a4ab8'); set(2, 1, '#3a4ab8'); set(1, 2, '#2a3a98'); set(1, 0, '#4f9a3e');
-          break;
-        case D.BOLT:
-          set(0, 0, '#9aa3b2'); set(1, 0, '#5a6170'); set(1, 1, '#9aa3b2'); set(3, 2, '#b0683e');
-          break;
-        case D.LICHEN:
-          set(0, 0, '#b8d48a'); set(1, 0, '#9ac070'); set(1, 1, '#b8d48a'); set(2, 1, '#9ac070');
-          break;
-      }
-    }
-
-    getChunk(cx, cy) {
-      const key = cx + ',' + cy;
-      if (this.chunks[key]) return this.chunks[key];
-      const S = 16 * T;
-      const p = new SV.Art.Pix(S, S);
-      for (let y = 0; y < S; y++)
-        for (let x = 0; x < S; x++) p.set(x, y, this.pixelColor(cx * S + x, cy * S + y));
-      for (let ty = 0; ty < 16; ty++)
-        for (let tx = 0; tx < 16; tx++) {
-          const gx = cx * 16 + tx, gy = cy * 16 + ty;
-          if (this.inBounds(gx, gy)) this.paintDeco(p, tx * T, ty * T, gx, gy);
-        }
-      const c = p.toCanvas();
-      this.chunks[key] = c;
-      return c;
-    }
-
-    // ---------------- krigsdimma ----------------
-    initFog() {
-      const [c, g] = SV.Art.makeCanvas(W, H);
-      g.fillStyle = 'rgba(12,18,26,0.93)';
-      g.fillRect(0, 0, W, H);
-      this.fogCanvas = c;
-      this.fogCtx = g;
-      for (let i = 0; i < W * H; i++) if (this.revealed[i]) g.clearRect(i % W, Math.floor(i / W), 1, 1);
     }
     // Returnerar antal nyupptäckta rutor.
     reveal(px, py, radius) {
@@ -620,7 +510,6 @@
           if (this.revealed[i]) continue;
           if (Math.hypot(x + 0.5 - cx, y + 0.5 - cy) > radius) continue;
           this.revealed[i] = 1;
-          if (this.fogCtx) this.fogCtx.clearRect(x, y, 1, 1);
           n++;
         }
       return n;
@@ -653,6 +542,8 @@
       if (bt === B.PINE || bt === B.PINE_SNOW || bt === B.SPRUCE || bt === B.BIRCH || bt === B.SPRUCE_DARK) return y < 44 ? '#2f5a4a' : '#2a5a32';
       if (bt === B.RUIN || bt === B.PART || bt === B.BARRICADE) return '#6c7380';
       if (bt === B.ROCK || bt === B.ROCK_MOSS) return '#7d828c';
+      if (bt === B.CAVEWALL) return '#2a3a6a';
+      if (gt === G.CAVE) return '#7a3a8a';
       switch (gt) {
         case G.DEEP:
         case G.SITE:

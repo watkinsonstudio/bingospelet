@@ -269,7 +269,7 @@
         target.setState('chase');
         SV.Sfx.play('bark');
         this.say('VOFF!', 2);
-        game.addFx({ type: 'ring', x: this.x, y: this.y - 6, r0: 2, r1: 26, life: 0.4, t: 0, col: '#ffd25e' });
+        game.addFx({ type: 'ring', x: this.x, y: this.y, r0: 2, r1: 26, life: 0.4, t: 0, col: '#ffd25e' });
         // springer i en cirkel bort från Signe
         const a0 = Math.atan2(target.y - this.y, target.x - this.x) + Math.PI;
         let ang = a0;
@@ -295,8 +295,8 @@
       SV.Sfx.play('bark');
       SV.Sfx.play('super');
       game.shake(6);
-      game.addFx({ type: 'ring', x: this.x, y: this.y - 6, r0: 4, r1: 120, life: 0.7, t: 0, col: '#ffd25e', thick: 3 });
-      game.addFx({ type: 'ring', x: this.x, y: this.y - 6, r0: 4, r1: 90, life: 0.5, t: 0, col: '#fff2b0' });
+      game.addFx({ type: 'ring', x: this.x, y: this.y, r0: 4, r1: 120, life: 0.7, t: 0, col: '#ffd25e', thick: 3 });
+      game.addFx({ type: 'ring', x: this.x, y: this.y, r0: 4, r1: 90, life: 0.5, t: 0, col: '#fff2b0' });
       const targets = game.robots; // get_nodes_in_group("robots")
       for (const robot of targets) {
         if (robot.active && SV.dist(this.x, this.y, robot.x, robot.y) < 120.0) robot.apply_stun(4.0);
@@ -359,8 +359,8 @@
         done: () => {
           this.z = 0;
           game.shake(5);
-          game.addFx({ type: 'ring', x: target.x, y: target.y - 6, r0: 2, r1: 30, life: 0.4, t: 0, col: '#c9a6ff' });
-          game.floater(target.x, target.y - 26, 'Minne raderat!', '#e0c8ff');
+          game.addFx({ type: 'ring', x: target.x, y: target.y, r0: 2, r1: 30, life: 0.4, t: 0, col: '#c9a6ff' });
+          game.floater(target.x, target.y, 'Minne raderat!', '#e0c8ff');
           target.disable(game);
         },
       };
@@ -436,8 +436,8 @@
         }
       });
       let cleared = 0;
-      if (id === 'push2') cleared = game.clearLogsNear(game.player.x, game.player.y, 2.6);
-      game.addFx({ type: 'ring', x: this.x, y: this.y - 6, r0: 4, r1: 48, life: 0.35, t: 0, col: '#e8d6a6' });
+      if (id === 'push2') cleared = game.clearLogsNear(game.player.x, game.player.y, 3.3);
+      game.addFx({ type: 'ring', x: this.x, y: this.y, r0: 4, r1: 48, life: 0.35, t: 0, col: '#e8d6a6' });
       SV.Sfx.play('emp');
       game.shake(3);
       if (cleared) {
@@ -523,7 +523,7 @@
           }
         });
         this.say(n ? 'Hämtat!' : '*sniffar*', 1.2);
-        game.addFx({ type: 'ring', x: this.x, y: this.y - 4, r0: 4, r1: 40, life: 0.3, t: 0, col: '#ff9a4a' });
+        game.addFx({ type: 'ring', x: this.x, y: this.y, r0: 4, r1: 40, life: 0.3, t: 0, col: '#ff9a4a' });
         return true;
       }
       // Nivå 2: elektronisk skenbild
@@ -561,7 +561,7 @@
           this.moving = true;
         },
         done: () => {
-          game.floater(target.x, target.y - 26, 'Strömlös!', '#ffcf5a');
+          game.floater(target.x, target.y, 'Strömlös!', '#ffcf5a');
           target.disable(game, { doubleLoot: true });
         },
       };
@@ -598,7 +598,7 @@
       game.addFx({ type: 'splash', x: game.player.x, y: game.player.y, r: R, life: 0.5, t: 0 });
       SV.Sfx.play('frost');
       this.say(n ? 'Plask!' : '*plask*', 1);
-      if (n) game.toast('Robotarna är blöta – El-staven gör extra skada!');
+      if (n) game.toast('Robotarna är blöta – elhuggen gör extra skada!');
       return true;
     }
     // Superattack: Översvämning
@@ -677,7 +677,7 @@
     beaver: {
       name: 'Bävern', trait: 'Byggare & vattenexpert', focus: 'Terräng och vattenteknik',
       levels: ['Signe korsar grunt vatten utan att frysa eller sakta in.', 'Bygger träbroar där brostolparna står.', 'Låser upp Superattacken Översvämning.'],
-      coop: [{ id: 'splash', name: 'Plask', cd: 6, desc: 'Blöter ner robotar – El-staven gör 50 % mer skada.' }, { id: 'build', name: 'Bygg / Plask', cd: 6, desc: 'Bygger bro vid brostolpar, annars Plask.' }],
+      coop: [{ id: 'splash', name: 'Plask', cd: 6, desc: 'Blöter ner robotar – Elhuggen gör 50 % mer skada.' }, { id: 'build', name: 'Bygg / Plask', cd: 6, desc: 'Bygger bro vid brostolpar, annars Plask.' }],
       super: { name: 'Översvämning', desc: 'En vattenvåg sköljer över stridsfältet och kortsluter robotar och el-barrikader.' },
     },
   };
@@ -731,7 +731,7 @@
       const i = ORDER.indexOf(c.kind);
       const w = this.game.world;
       const a = (i / ORDER.length) * Math.PI * 2;
-      c.placeAt(w.campfire.x + Math.cos(a) * 26, w.campfire.y + Math.sin(a) * 16 + 4);
+      c.placeAt(w.campfire.x + Math.cos(a) * 44, w.campfire.y + Math.sin(a) * 30 + 6);
       c.task = null;
       c.action = null;
       c.z = 0;
