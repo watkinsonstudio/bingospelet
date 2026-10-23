@@ -87,10 +87,80 @@ func _ready() -> void:
 	game.ui.open_menu("map")
 	await _wait(0.4)
 	await _shot("09_map")
+	# klicka igenom varje flik i Skogsboken och varje knapp i flikarna
+	for tab in ["comps", "map", "gallery", "help", "test"]:
+		await _press_all_in_tab(tab)
+	# bläddra igenom hela galleriet och visa djuren på alla tre nivåer
+	for k in game.ui.GALLERY.size():
+		for lvl in ["Nivå 1", "Nivå 2", "Nivå 3"]:
+			game.ui.open_menu("gallery")
+			await _frames(2)
+			for b in _buttons(game.ui.menu_tabs.get_current_tab_control()):
+				if b.text == lvl:
+					b.pressed.emit()
+					await _frames(3)
+					break
+		game.ui.open_menu("gallery")
+		await _frames(2)
+		await _wait(0.2)
+		await _shot("gallery_%02d" % k)
+		for b in _buttons(game.ui.menu_tabs.get_current_tab_control()):
+			if b.text == "Nästa":
+				b.pressed.emit()
+				await _frames(3)
+				break
+	print("galleri: %d figurer visade" % game.ui.GALLERY.size())
+	game.ui.close_menu()
+	# smedjans båda flikar, alla knappar
+	game.player.scrap = 999
+	game.player.chips = 99
+	for t in 2:
+		var n := 999
+		var i := 0
+		while i < n:
+			game.ui.open_forge()
+			game.ui.forge_tabs.current_tab = t
+			await _frames(2)
+			var bs := _buttons(game.ui.forge_tabs.get_current_tab_control())
+			n = bs.size()
+			if i < n:
+				bs[i].pressed.emit()
+				await _frames(2)
+			i += 1
+			if game.ui.forge_panel.visible:
+				game.ui.close_forge()
+	print("smedjan: alla knappar tryckta")
 	game.ui.close_menu()
 	game.save_game()
 	print("RÖKTEST KLART")
 	get_tree().quit()
+
+
+func _buttons(root: Node) -> Array:
+	var out: Array = []
+	for c in root.get_children():
+		if c is BaseButton and not c.is_queued_for_deletion():
+			out.append(c)
+		out.append_array(_buttons(c))
+	return out
+
+
+## Öppnar fliken på nytt inför varje knapp eftersom knapparna bygger om fliken.
+func _press_all_in_tab(tab: String) -> void:
+	var n := 999
+	var i := 0
+	while i < n:
+		game.ui.open_menu(tab)
+		await _frames(2)
+		var bs := _buttons(game.ui.menu_tabs.get_current_tab_control())
+		n = bs.size()
+		if i < n:
+			print("  %s: %s" % [tab, bs[i].text.replace("\n", " ")])
+			bs[i].pressed.emit()
+			await _frames(3)
+		i += 1
+	game.ui.close_dialog()
+	print("flik %s: %d knappar tryckta" % [tab, n])
 
 
 func _frames(n: int) -> void:

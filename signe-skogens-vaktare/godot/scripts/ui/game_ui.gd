@@ -486,13 +486,13 @@ func _make_preview_viewport(size: Vector2i, dist: float, look: Vector3) -> SubVi
 	e.background_mode = Environment.BG_CLEAR_COLOR
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	e.ambient_light_color = Color("#bfd8ff")
-	e.ambient_light_energy = 0.9
+	e.ambient_light_energy = 0.75
 	e.tonemap_mode = Environment.TONE_MAPPER_ACES
 	w.environment = e
 	vp.add_child(w)
 	var key := DirectionalLight3D.new()
 	key.rotation = Vector3(-0.7, 0.5, 0)
-	key.light_energy = 1.6
+	key.light_energy = 1.25
 	vp.add_child(key)
 	var rim := DirectionalLight3D.new()
 	rim.rotation = Vector3(-0.3, PI + 0.6, 0)
@@ -517,6 +517,26 @@ func _set_preview(pivot: Node3D, model: Node3D) -> void:
 	pivot.add_child(model)
 
 
+## Skalar och centrerar modellen så att den ryms i förhandsvisningen
+## (höjd h, bredd w) med fötterna på y = floor.
+func _fit_preview(pivot: Node3D, model: Node3D, h: float, w: float, floor: float) -> void:
+	var inv := pivot.global_transform.affine_inverse()
+	var box := AABB()
+	var first := true
+	for n in model.find_children("*", "VisualInstance3D", true, false):
+		if not (n as Node3D).is_visible_in_tree():
+			continue
+		var b: AABB = (inv * (n as VisualInstance3D).global_transform) * (n as VisualInstance3D).get_aabb()
+		box = b if first else box.merge(b)
+		first = false
+	if first or box.size.y <= 0.0:
+		return
+	var k := minf(h / box.size.y, w / maxf(box.size.x, box.size.z))
+	var p := model.position
+	model.scale *= k
+	model.position = Vector3(-(box.get_center().x - p.x) * k, floor - (box.position.y - p.y) * k, -(box.get_center().z - p.z) * k)
+
+
 # ---------------------------------------------------------------
 # Uppdatering varje bildruta
 # ---------------------------------------------------------------
@@ -530,7 +550,8 @@ func update(dt: float) -> void:
 	if _banner_t > 0.0:
 		_banner_t -= dt
 		banner_box.modulate.a = clampf(minf(_banner_t, 2.8 - _banner_t) * 2.0, 0.0, 1.0)
-	if gallery_vp and gallery_vp.is_visible_in_tree():
+	# en SubViewport är ingen CanvasItem; synligheten avgörs av dess container
+	if is_instance_valid(gallery_vp) and (gallery_vp.get_parent() as Control).is_visible_in_tree():
 		gallery_pivot.rotation.y += dt * 0.6
 	if forge_vp and forge_panel.visible:
 		forge_pivot.rotation.y += dt * 0.7
@@ -1074,6 +1095,8 @@ func _fill_gallery(v: VBoxContainer) -> void:
 		sub = info.trait.to_upper()
 		text = "%s. %s Superattack: %s." % [info.focus, info.levels[gallery_lvl - 1], info.super.name]
 	_set_preview(gallery_pivot, model)
+	var grow := 0.8 + 0.1 * gallery_lvl if item.key in Companion.INFO else 1.0
+	_fit_preview(gallery_pivot, model, 1.6 * grow, 2.0 * grow, -0.25)
 	side.add_child(_eyebrow(sub))
 	side.add_child(_label(nm, 40, TEXT, F_DISPLAY))
 	var desc := _rich(text, 16)
