@@ -1,0 +1,72 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/main.gd" id="1_main"]
+[ext_resource type="Script" path="res://scripts/environment/environment_controller.gd" id="2_env"]
+[ext_resource type="Script" path="res://scripts/companions/companion_manager.gd" id="3_comp"]
+[ext_resource type="Script" path="res://scripts/fx/fx.gd" id="4_fx"]
+[ext_resource type="Script" path="res://scripts/ui/game_ui.gd" id="5_ui"]
+
+[sub_resource type="Environment" id="Env_1"]
+background_mode = 1
+background_color = Color(0.07, 0.19, 0.45, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.55, 0.7, 1, 1)
+ambient_light_energy = 1.1
+tonemap_mode = 3
+tonemap_white = 6.0
+ssao_enabled = true
+ssao_radius = 1.4
+ssao_intensity = 1.6
+glow_enabled = true
+glow_normalized = true
+glow_intensity = 0.85
+glow_strength = 1.1
+glow_bloom = 0.08
+glow_blend_mode = 1
+glow_hdr_threshold = 0.9
+fog_enabled = true
+fog_light_color = Color(0.2, 0.3, 0.6, 1)
+fog_density = 0.014
+fog_sky_affect = 0.0
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.01
+volumetric_fog_albedo = Color(0.5, 0.6, 0.9, 1)
+volumetric_fog_length = 48.0
+adjustment_enabled = true
+adjustment_saturation = 1.12
+
+[node name="Main" type="Node3D"]
+script = ExtResource("1_main")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env_1")
+
+[node name="Moon" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.707107, -0.454519, 0.541675, 0, 0.766044, 0.642788, -0.707107, -0.454519, 0.541675, 0, 20, 0)
+light_color = Color(0.78, 0.9, 1, 1)
+shadow_enabled = true
+directional_shadow_mode = 1
+directional_shadow_max_distance = 60.0
+
+[node name="EnvironmentController" type="Node" parent="." node_paths=PackedStringArray("sky_directional_light", "world_environment")]
+script = ExtResource("2_env")
+sky_directional_light = NodePath("../Moon")
+world_environment = NodePath("../WorldEnvironment")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+fov = 30.0
+far = 200.0
+current = true
+
+[node name="World" type="Node3D" parent="."]
+
+[node name="Actors" type="Node3D" parent="."]
+
+[node name="CompanionManager" type="Node3D" parent="."]
+script = ExtResource("3_comp")
+
+[node name="Fx" type="Node3D" parent="."]
+script = ExtResource("4_fx")
+
+[node name="UI" type="CanvasLayer" parent="."]
+script = ExtResource("5_ui")

@@ -1,0 +1,68 @@
+; Engine configuration file.
+; Signe och Skogens Väktare – Godot 4-projekt.
+
+config_version=5
+
+[application]
+
+config/name="Signe och Skogens Väktare"
+config/description="Isometriskt 3D-äventyr i en lysande skog. Signe, sex fluffiga djurkompisar, robotfiender och en tidsstorm."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.5", "Forward Plus")
+config/icon="res://icon.svg"
+
+[autoload]
+
+Controls="*res://scripts/core/controls.gd"
+Sfx="*res://scripts/core/sfx.gd"
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[gui]
+
+theme/default_theme_scale=1.0
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=false
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
+renderer/rendering_method.mobile="gl_compatibility"
+anti_aliasing/quality/msaa_3d=2
+environment/defaults/default_clear_color=Color(0.03, 0.05, 0.16, 1)
+lights_and_shadows/directional_shadow/size=4096
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
+
+[shader_globals]
+
+cut_pos={
+"type": "vec2",
+"value": Vector2(0, 0)
+}
+cut_z={
+"type": "float",
+"value": 0.0
+}
+cut_r={
+"type": "float",
+"value": 0.0
+}
+cut_aspect={
+"type": "float",
+"value": 1.7
+}
+wind={
+"type": "float",
+"value": 0.3
+}
+storm={
+"type": "float",
+"value": 0.3
+}

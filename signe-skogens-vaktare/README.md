@@ -1,5 +1,7 @@
 # Signe och Skogens Väktare
 
+> **Huvudversionen finns nu i Godot 4.** Den ligger i [`godot/`](godot/README.md) och är byggd för PC med handkontroll. Webbversionen nedan finns kvar som referens.
+
 Spelbar prototyp för PC: ett isometriskt 3D-äventyr i en lysande, lummig
 skog, byggt efter speldesigndokumentet *Signe och Skogens Väktare* och Signes
 egna referensbilder:
