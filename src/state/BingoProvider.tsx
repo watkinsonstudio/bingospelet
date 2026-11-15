@@ -4,7 +4,8 @@ import { repository } from '../data/repository';
 import { uid } from '../lib/uid';
 import type { DataStore, Level, Task, Week } from '../data/types';
 import { FREE_CELL_INDEX } from '../data/types';
-import { getActiveWeek, getClubWeeks, getPlayer } from '../domain/selectors';
+import { getActiveWeek, getAdventCalendar, getClubWeeks, getPlayer } from '../domain/selectors';
+import { getNow } from '../lib/today';
 
 const AUTH_KEY = 'sommarbingo:auth';
 export const CLUB_ID = 'club-skultuna';
@@ -30,6 +31,9 @@ interface BingoContextValue {
   createNextWeek: (theme: string) => Promise<void>;
   updateTask: (taskId: string, patch: Partial<Omit<Task, 'id' | 'weekId' | 'cellIndex'>>) => Promise<void>;
   setFinalUnlocked: (teamId: string, unlocked: boolean) => Promise<void>;
+  completeDoor: (day: number, level: Level) => Promise<void>;
+  clearDoor: (day: number) => Promise<void>;
+  setAdventAllOpen: (teamId: string, open: boolean) => Promise<void>;
   resetDemo: () => Promise<void>;
 }
 
@@ -151,6 +155,28 @@ export function BingoProvider({ children }: { children: ReactNode }) {
     setDb(await repository.setFinalUnlocked(teamId, unlocked));
   }, []);
 
+  const completeDoor = useCallback(
+    async (day: number, level: Level) => {
+      const calendar = db ? getAdventCalendar(db, CLUB_ID) : null;
+      if (!calendar || !currentPlayerId) return;
+      setDb(await repository.completeDoor(calendar.id, currentPlayerId, day, level, getNow().toISOString()));
+    },
+    [db, currentPlayerId],
+  );
+
+  const clearDoor = useCallback(
+    async (day: number) => {
+      const calendar = db ? getAdventCalendar(db, CLUB_ID) : null;
+      if (!calendar || !currentPlayerId) return;
+      setDb(await repository.clearDoor(calendar.id, currentPlayerId, day));
+    },
+    [db, currentPlayerId],
+  );
+
+  const setAdventAllOpen = useCallback(async (teamId: string, open: boolean) => {
+    setDb(await repository.setAdventAllOpen(teamId, open));
+  }, []);
+
   const resetDemo = useCallback(async () => {
     const next = await repository.reset();
     setDb(next);
@@ -181,6 +207,9 @@ export function BingoProvider({ children }: { children: ReactNode }) {
       createNextWeek,
       updateTask,
       setFinalUnlocked,
+      completeDoor,
+      clearDoor,
+      setAdventAllOpen,
       resetDemo,
     };
   }, [
@@ -199,6 +228,9 @@ export function BingoProvider({ children }: { children: ReactNode }) {
     createNextWeek,
     updateTask,
     setFinalUnlocked,
+    completeDoor,
+    clearDoor,
+    setAdventAllOpen,
     resetDemo,
   ]);
 

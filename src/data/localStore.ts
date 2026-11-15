@@ -1,5 +1,5 @@
 import type { DataStore } from './types';
-import { SEED_VERSION, createSeedData } from './seed';
+import { SEED_VERSION, createAdventSeed, createSeedData } from './seed';
 
 const STORAGE_KEY = 'sommarbingo:db';
 
@@ -14,6 +14,12 @@ export function loadStore(): DataStore {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return seedAndPersist();
     const parsed = JSON.parse(raw) as DataStore;
+    if (parsed && parsed.version === 3) {
+      // v3 → v4: lägg till adventskalendern men behåll sommarens resultat.
+      const migrated: DataStore = { ...parsed, ...createAdventSeed(), version: SEED_VERSION };
+      saveStore(migrated);
+      return migrated;
+    }
     if (!parsed || parsed.version !== SEED_VERSION) return seedAndPersist();
     return parsed;
   } catch {

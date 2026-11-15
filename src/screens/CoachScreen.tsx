@@ -1,11 +1,19 @@
 import { useState } from 'react';
 import { CLUB_ID, useBingo } from '../state/BingoProvider';
 import { FREE_CELL_INDEX, type Task } from '../data/types';
-import { getActiveWeek, getClubWeeks, getTasks, getTeamMembers, getWeek } from '../domain/selectors';
+import {
+  adventAllOpenFor,
+  getActiveWeek,
+  getClubWeeks,
+  getTasks,
+  getTeamMembers,
+  getWeek,
+} from '../domain/selectors';
 import { IconArchive, IconCheck, IconUnlock, IconWhistle } from '../components/icons';
 
 export function CoachScreen() {
-  const { db, selectedWeekId, isCoach, updateTask, archiveWeek, createNextWeek, resetDemo } = useBingo();
+  const { db, selectedWeekId, isCoach, updateTask, archiveWeek, createNextWeek, resetDemo, setAdventAllOpen } =
+    useBingo();
   const [newTheme, setNewTheme] = useState('');
 
   if (!isCoach) return null;
@@ -93,6 +101,34 @@ export function CoachScreen() {
           </button>
         </div>
       )}
+
+      {/* Julkalendern */}
+      <div className="card stack">
+        <div className="section-title" style={{ fontSize: '1rem' }}>
+          🎄 Julkalendern
+        </div>
+        <p className="section-sub">
+          Luckorna öppnas en om dagen 1–24 december och går att klara i efterhand fram till trettondedag jul. Vill ni
+          provköra, eller låta laget komma ikapp, kan du öppna alla luckor direkt för ett lag.
+        </p>
+        {clubTeams.map((t) => {
+          const open = adventAllOpenFor(db, t.id);
+          return (
+            <div key={t.id} className="team-manage">
+              <div className="grow">
+                <div style={{ fontWeight: 700 }}>{t.name}</div>
+                <div className="leader__meta">{open ? 'Alla luckor öppna' : 'En lucka om dagen'}</div>
+              </div>
+              <button
+                className={`btn btn--sm ${open ? 'btn--ghost' : 'btn--primary'}`}
+                onClick={() => void setAdventAllOpen(t.id, !open)}
+              >
+                {open ? 'Stäng igen' : 'Öppna alla'}
+              </button>
+            </div>
+          );
+        })}
+      </div>
 
       {/* Alla lag */}
       <div className="card stack">

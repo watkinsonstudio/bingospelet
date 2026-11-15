@@ -8,6 +8,7 @@ import { TeamCardScreen } from './screens/TeamCardScreen';
 import { LeaderboardScreen } from './screens/LeaderboardScreen';
 import { FinalScreen } from './screens/FinalScreen';
 import { CoachScreen } from './screens/CoachScreen';
+import { AdventScreen } from './screens/AdventScreen';
 
 export default function App() {
   const { currentPlayerId, isCoach } = useBingo();
@@ -25,6 +26,7 @@ export default function App() {
           <Route path="/lag" element={<TeamCardScreen />} />
           <Route path="/topplista" element={<LeaderboardScreen />} />
           <Route path="/final" element={<FinalScreen />} />
+          <Route path="/advent" element={<AdventScreen />} />
           <Route path="/coach" element={isCoach ? <CoachScreen /> : <Navigate to="/" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

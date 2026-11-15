@@ -1,4 +1,4 @@
-import type { DataStore, Entry, Player, Task, Team, Week } from '../data/types';
+import type { AdventCalendar, AdventDoor, AdventEntry, DataStore, Entry, Player, Task, Team, Week } from '../data/types';
 import {
   buildLeaderboard,
   cellContributors,
@@ -155,3 +155,23 @@ export function isCellEditableForPlayer(
   }
   return false;
 }
+
+// --- Adventskalendern --------------------------------------------------------
+
+export const getAdventCalendar = (db: DataStore, clubId: string): AdventCalendar | null =>
+  db.adventCalendars.find((c) => c.clubId === clubId) ?? null;
+
+export const getAdventDoors = (db: DataStore, calendarId: string): AdventDoor[] =>
+  db.adventDoors.filter((d) => d.calendarId === calendarId).sort((a, b) => a.day - b.day);
+
+/** Alla adventsentries för ett lags medlemmar. */
+export function getTeamAdventEntries(db: DataStore, calendarId: string, teamId: string): AdventEntry[] {
+  const memberIds = new Set(getTeamMembers(db, teamId).map((p) => p.id));
+  return db.adventEntries.filter((e) => e.calendarId === calendarId && memberIds.has(e.playerId));
+}
+
+export const getPlayerAdventEntries = (db: DataStore, calendarId: string, playerId: string): AdventEntry[] =>
+  db.adventEntries.filter((e) => e.calendarId === calendarId && e.playerId === playerId);
+
+export const adventAllOpenFor = (db: DataStore, teamId: string): boolean =>
+  Boolean(db.teamSettings.find((s) => s.teamId === teamId)?.adventAllOpenAt);

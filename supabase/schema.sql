@@ -75,7 +75,43 @@ create table if not exists entries (
 
 create table if not exists team_settings (
   team_id           uuid primary key references teams (id) on delete cascade,
-  final_unlocked_at timestamptz
+  final_unlocked_at timestamptz,
+  -- Coachen har öppnat alla adventsluckor direkt (annars en om dagen).
+  advent_all_open_at timestamptz
+);
+
+-- Adventskalendern: 24 luckor (1–24 december) med utmaningar i tre nivåer.
+create table if not exists advent_calendars (
+  id      uuid primary key default gen_random_uuid(),
+  club_id uuid not null references clubs (id) on delete cascade,
+  year    int  not null,
+  title   text not null default 'Julkalendern',
+  unique (club_id, year)
+);
+
+create table if not exists advent_doors (
+  id                uuid primary key default gen_random_uuid(),
+  calendar_id       uuid not null references advent_calendars (id) on delete cascade,
+  day               int  not null check (day between 1 and 24),
+  title             text not null,
+  emoji             text not null default '🎁',
+  intro             text not null default '',
+  place             text not null default 'överallt' check (place in ('inne', 'ute', 'hemma', 'överallt')),
+  level_easy_text   text not null,
+  level_medium_text text not null,
+  level_hard_text   text not null,
+  unique (calendar_id, day)
+);
+
+create table if not exists advent_entries (
+  id           uuid primary key default gen_random_uuid(),
+  calendar_id  uuid not null references advent_calendars (id) on delete cascade,
+  player_id    uuid not null references players (id) on delete cascade,
+  day          int  not null check (day between 1 and 24),
+  level        text not null check (level in ('L', 'M', 'S')),
+  -- Första gången luckan klarades; ändras inte vid nivåbyte ("i tid"-bonusen).
+  completed_at timestamptz not null default now(),
+  unique (calendar_id, player_id, day)
 );
 
 -- ---------------------------------------------------------------------------

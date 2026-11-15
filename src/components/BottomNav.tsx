@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom';
 import { useBingo } from '../state/BingoProvider';
-import { IconCard, IconFinal, IconTeam, IconTrophy, IconWhistle } from './icons';
+import { IconCard, IconFinal, IconStar, IconTeam, IconTrophy, IconWhistle } from './icons';
 
 const items = [
   { to: '/', label: 'Min bricka', icon: IconCard, end: true },
+  { to: '/advent', label: 'Jul', icon: IconStar, end: false },
   { to: '/lag', label: 'Laget', icon: IconTeam, end: false },
   { to: '/topplista', label: 'Topplista', icon: IconTrophy, end: false },
   { to: '/final', label: 'Final', icon: IconFinal, end: false },

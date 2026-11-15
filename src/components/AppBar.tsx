@@ -1,3 +1,4 @@
+import { useLocation } from 'react-router-dom';
 import { CLUB_ID, useBingo } from '../state/BingoProvider';
 import { getClub, getClubWeeks, getPlayer, getTeam } from '../domain/selectors';
 import { IconLogout } from './icons';
@@ -11,6 +12,8 @@ export function AppBar() {
   const weeks = getClubWeeks(db, CLUB_ID);
   const clubTeams = db.teams.filter((t) => t.clubId === CLUB_ID);
   const showTeamSelect = isCoach && clubTeams.length > 1;
+  // Veckoväljaren hör till bingon – julkalendern har sina egna luckor.
+  const showWeeks = useLocation().pathname !== '/advent';
 
   return (
     <header className="appbar">
@@ -60,19 +63,21 @@ export function AppBar() {
         </div>
       )}
 
-      <nav className="weekbar" aria-label="Veckor">
-        {weeks.map((w) => (
-          <button
-            key={w.id}
-            className={`weekpill weekpill--${w.status}`}
-            aria-pressed={w.id === selectedWeekId}
-            onClick={() => selectWeek(w.id)}
-          >
-            <span className="weekpill__dot" />
-            v.{w.weekNumber} · {w.theme}
-          </button>
-        ))}
-      </nav>
+      {showWeeks && (
+        <nav className="weekbar" aria-label="Veckor">
+          {weeks.map((w) => (
+            <button
+              key={w.id}
+              className={`weekpill weekpill--${w.status}`}
+              aria-pressed={w.id === selectedWeekId}
+              onClick={() => selectWeek(w.id)}
+            >
+              <span className="weekpill__dot" />
+              v.{w.weekNumber} · {w.theme}
+            </button>
+          ))}
+        </nav>
+      )}
     </header>
   );
 }

@@ -131,3 +131,9 @@ export const IconBall = (p: IconProps) => (
     <path d="m12 7 3 2-1 3.5h-4L9 9l3-2ZM12 3v4M20 10l-3.5 2.5M4 10l3.5 2.5M7 20l1.5-3.5M17 20l-1.5-3.5" />
   </svg>
 );
+
+export const IconStar = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M12 3l2.7 5.6 6.1.8-4.5 4.2 1.1 6-5.4-2.9-5.4 2.9 1.1-6-4.5-4.2 6.1-.8z" />
+  </svg>
+);
