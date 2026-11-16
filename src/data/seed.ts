@@ -1,5 +1,6 @@
 import { FREE_CELL_INDEX, type DataStore, type Player, type Task, type Week } from './types';
 import { ROSTER } from './roster';
+import { adventCalendar, buildAdventDoors } from './adventSeed';
 
 // ---------------------------------------------------------------------------
 // Klubb, lag och trupper – byggs från föreningens riktiga medlemslista
@@ -188,8 +189,17 @@ function freeTask(weekId: string): Task {
 // ---------------------------------------------------------------------------
 
 // v3: riktiga trupper (namnkrockar disambiguerade, Fotbollskul Damer borttagen).
-// Tomma brickor. Bumpad version → localStorage seedas om.
-export const SEED_VERSION = 3;
+// v4: adventskalendern. v3-data migreras (se localStore.ts) så att inget försvinner.
+export const SEED_VERSION = 4;
+
+/** Adventsdelen av seed-datan – används även för att migrera v3-data. */
+export function createAdventSeed(): Pick<DataStore, 'adventCalendars' | 'adventDoors' | 'adventEntries'> {
+  return {
+    adventCalendars: [adventCalendar(CLUB_ID)],
+    adventDoors: buildAdventDoors(),
+    adventEntries: [],
+  };
+}
 
 export function createSeedData(): DataStore {
   return {
@@ -199,7 +209,8 @@ export function createSeedData(): DataStore {
     weeks,
     tasks: buildTasks(),
     entries: [],
-    teamSettings: teams.map((t) => ({ teamId: t.id, finalUnlockedAt: null })),
+    teamSettings: teams.map((t) => ({ teamId: t.id, finalUnlockedAt: null, adventAllOpenAt: null })),
+    ...createAdventSeed(),
     version: SEED_VERSION,
   };
 }

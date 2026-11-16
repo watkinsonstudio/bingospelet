@@ -76,7 +76,31 @@ supabase/        schema.sql + seed.sql (redo att koppla på)
   vilket gör ännu icke-tända rutor (även i arkiverade veckor) möjliga att klara
   gemensamt.
 
-Domänreglerna täcks av 14 enhetstester i `src/domain/scoring.test.ts`.
+Domänreglerna täcks av 14 enhetstester i `src/domain/scoring.test.ts` (plus 10 för julkalendern).
+
+## Julkalendern 🎄
+
+Samma idé som sommarbingon, fast för december: fliken **Jul** är en adventskalender
+med 24 luckor. Bakom varje lucka finns en fotbollsutmaning i tre nivåer, anpassad för
+vintern (det mesta går att göra inomhus med en mjuk boll, några ute i snön och några
+handlar om att vara en bra lagkompis). Utmaningarna ligger i `src/data/adventSeed.ts`.
+
+- **En lucka om dagen.** Lucka _n_ öppnas _n_ december. Låsta luckor visar bara en
+  nedräkning, ingen tjuvkikning. Missade luckor går att klara i efterhand fram till
+  trettondedag jul; därefter är kalendern skrivskyddad.
+- **Poäng:** Lätt 1p, Medel 2p, Svår 3p, plus **⭐ +1p** om luckan klaras samma dag som
+  den öppnas. Det belönar att vara med varje dag.
+- **Lagets julgran:** ett ljus per lucka. Ljuset tänds när minst hälften av lagets
+  spelare klarat luckan (samma tröskel som lagbrickan). När alla 24 lyser tänds
+  stjärnan. Under granen visas vilka som klarat dagens lucka och en egen topplista.
+- **Coach:** under _Coach → Julkalendern_ kan man öppna alla luckor direkt för ett lag
+  (för att provköra eller låta laget komma ikapp).
+- **Provköra före december:** lägg till `?datum=2026-12-07` i adressen så beter sig
+  appen som om det vore 7 december. `?datum=idag` återgår till riktigt datum.
+
+Reglerna ligger som rena funktioner i `src/domain/advent.ts` och täcks av
+`src/domain/advent.test.ts`. Befintlig sommardata i webbläsaren migreras automatiskt
+(schemaversion 3 → 4); inget raderas.
 
 ## Koppla mot Supabase
 

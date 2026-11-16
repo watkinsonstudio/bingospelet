@@ -1,4 +1,9 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { CLUB_ID } from '../state/BingoProvider';
+import { dateKey, daysUntilDoor, isAdventOver, todaysDoor } from '../domain/advent';
+import { getAdventCalendar } from '../domain/selectors';
+import { getNow } from '../lib/today';
 import { useBingo } from '../state/BingoProvider';
 import { FREE_CELL_INDEX, LEVEL_LABELS, type Level } from '../data/types';
 import { cellsInCompleteLines, isFreeCell } from '../domain/board';
@@ -39,8 +44,30 @@ export function MyCardScreen() {
   const finalUnlocked = finalUnlockedFor(db, player.teamId);
   const openTask = openCell !== null ? getTask(db, week.id, openCell) : null;
 
+  const calendar = getAdventCalendar(db, CLUB_ID);
+  const adventLine = (() => {
+    if (!calendar) return null;
+    const now = getNow();
+    const key = dateKey(now);
+    if (isAdventOver(calendar.year, key)) return null;
+    const today = todaysDoor(calendar.year, key);
+    if (today) return `Julkalendern: lucka ${today} är öppen!`;
+    if (key > `${calendar.year}-12-24`) return 'Julkalendern: hinner du klara de missade luckorna?';
+    const days = daysUntilDoor(calendar.year, 1, now);
+    return days <= 30 ? `Julkalendern öppnar om ${days} ${days === 1 ? 'dag' : 'dagar'}` : null;
+  })();
+
   return (
     <div className="stack">
+      {adventLine && (
+        <Link to="/advent" className="banner banner--star advent-link">
+          <span className="banner__icon" aria-hidden>
+            🎄
+          </span>
+          <span className="grow">{adventLine}</span>
+          <span aria-hidden>›</span>
+        </Link>
+      )}
       {archived && (
         <div className="banner banner--archived">
           <IconArchive className="banner__icon" width={18} height={18} />

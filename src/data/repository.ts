@@ -2,6 +2,7 @@ import { uid } from '../lib/uid';
 import { loadStore, resetStore, saveStore } from './localStore';
 import {
   FREE_CELL_INDEX,
+  type AdventEntry,
   type DataStore,
   type Entry,
   type Level,
@@ -32,6 +33,12 @@ export interface BingoRepository {
   updateTask(taskId: string, patch: Partial<Omit<Task, 'id' | 'weekId' | 'cellIndex'>>): Promise<DataStore>;
   /** Låser upp / låser sommarfinalen för ett lag. */
   setFinalUnlocked(teamId: string, unlocked: boolean): Promise<DataStore>;
+  /** Markerar en adventslucka som klarad (byte av nivå behåller första tidsstämpeln). */
+  completeDoor(calendarId: string, playerId: string, day: number, level: Level, completedAt?: string): Promise<DataStore>;
+  /** Ångrar en klarad adventslucka. */
+  clearDoor(calendarId: string, playerId: string, day: number): Promise<DataStore>;
+  /** Öppnar alla adventsluckor direkt för ett lag (eller återgår till en om dagen). */
+  setAdventAllOpen(teamId: string, open: boolean): Promise<DataStore>;
   /** Nollställer till seed-data (demo). */
   reset(): Promise<DataStore>;
 }
@@ -122,6 +129,45 @@ export class LocalRepository implements BingoRepository {
     return this.commit({ ...this.db, teamSettings });
   }
 
+  async completeDoor(
+    calendarId: string,
+    playerId: string,
+    day: number,
+    level: Level,
+    completedAt: string = new Date().toISOString(),
+  ): Promise<DataStore> {
+    const existing = this.db.adventEntries.find(
+      (e) => e.calendarId === calendarId && e.playerId === playerId && e.day === day,
+    );
+    let adventEntries: AdventEntry[];
+    if (existing) {
+      // Nivåbyte: behåll completedAt så att "klarad i tid" inte går förlorad.
+      adventEntries = this.db.adventEntries.map((e) => (e.id === existing.id ? { ...e, level } : e));
+    } else {
+      adventEntries = [
+        ...this.db.adventEntries,
+        { id: `advent-${uid()}`, calendarId, playerId, day, level, completedAt },
+      ];
+    }
+    return this.commit({ ...this.db, adventEntries });
+  }
+
+  async clearDoor(calendarId: string, playerId: string, day: number): Promise<DataStore> {
+    const adventEntries = this.db.adventEntries.filter(
+      (e) => !(e.calendarId === calendarId && e.playerId === playerId && e.day === day),
+    );
+    return this.commit({ ...this.db, adventEntries });
+  }
+
+  async setAdventAllOpen(teamId: string, open: boolean): Promise<DataStore> {
+    const stamp = open ? new Date().toISOString() : null;
+    const existing = this.db.teamSettings.find((s) => s.teamId === teamId);
+    const teamSettings = existing
+      ? this.db.teamSettings.map((s) => (s.teamId === teamId ? { ...s, adventAllOpenAt: stamp } : s))
+      : [...this.db.teamSettings, { teamId, finalUnlockedAt: null, adventAllOpenAt: stamp }];
+    return this.commit({ ...this.db, teamSettings });
+  }
+
   async reset(): Promise<DataStore> {
     this.db = resetStore();
     return snapshot(this.db);
@@ -138,6 +184,9 @@ function snapshot(db: DataStore): DataStore {
     tasks: db.tasks.map((t) => ({ ...t })),
     entries: db.entries.map((e) => ({ ...e })),
     teamSettings: db.teamSettings.map((s) => ({ ...s })),
+    adventCalendars: db.adventCalendars.map((c) => ({ ...c })),
+    adventDoors: db.adventDoors.map((d) => ({ ...d })),
+    adventEntries: db.adventEntries.map((e) => ({ ...e })),
     version: db.version,
   };
 }
